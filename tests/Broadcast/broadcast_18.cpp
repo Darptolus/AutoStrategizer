@@ -13,7 +13,7 @@ int arr_len = 10;
 // int arr_len = 26214400; // 100 Mb
 // int arr_len = 268435456; // 1 Gb
 
-bool v_flag = false; // Print verifications True=On False=Off
+bool v_flag = true; // Print verifications True=On False=Off
 
 void verify(void ** x_ptr){
   int num_dev = omp_get_num_devices();  

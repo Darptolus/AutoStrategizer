@@ -1,13 +1,20 @@
 #include <stdio.h>
 #include <omp.h>
 #include <cstdlib>
-// #include <cuda.h>
 #include <cuda_runtime.h>
-// #include <device_launch_parameters.h>
 
-// Testing cudaMemcpy -> Used for testing different strategies -> printed validation 
+// Testing cudaMemcpy -> Used for testing different array sizes -> no validation 
 
 int arr_len = 10;
+// int arr_len = 256; // 1 Kb
+// int arr_len = 2560; // 10 Kb
+// int arr_len = 25600; // 100 Kb
+// int arr_len = 262144; // 1 Mb
+// int arr_len = 2621440; // 10 Mb
+// int arr_len = 26214400; // 100 Mb
+// int arr_len = 268435456; // 1 Gb
+
+bool v_flag = false; // Print verifications True=On False=Off
 
 void verify(void ** x_ptr){
   int num_dev = omp_get_num_devices();  
@@ -34,9 +41,38 @@ void print_hval(int * x_arr){
 
 int main()
 {
+  double start, end; 
   int num_dev = omp_get_num_devices();  
   int* x_arr = (int*) malloc(arr_len * sizeof(int)); 
   
+  cudaError_t c_error;
+
+  // Check PeerToPeer
+  int can_access = 0;
+  for(int dev_a = 0; dev_a < num_dev; ++dev_a){
+    for(int dev_b = num_dev-1; dev_b >= 0; --dev_b){
+    // for(int dev_b = 0; dev_b < num_dev; ++dev_b){
+      if (dev_a != dev_b){
+        cudaDeviceCanAccessPeer(&can_access, dev_a, dev_b);
+        if(!can_access){
+          cudaSetDevice(dev_a);
+          c_error = cudaDeviceEnablePeerAccess(dev_b, 0);
+          cudaDeviceCanAccessPeer(&can_access, dev_a, dev_b);
+          if(!can_access){
+            printf("Unable to enable P2P Dev: %d -> Dev: %d\n", dev_a, dev_b);
+            printf("code: %d, reason: %s\n", c_error, cudaGetErrorString(c_error));
+          }else{
+            printf("Enabled P2P Dev: %d -> Dev: %d\n", dev_a, dev_b);
+          }
+        }else{
+            cudaSetDevice(dev_a);
+            c_error = cudaDeviceEnablePeerAccess(dev_b, 0);
+            printf("Default: (%d) Enabled P2P Dev: %d -> Dev: %d\n",c_error, dev_a, dev_b);
+        }
+      }
+    }
+  }
+
   // Set device pointers
   void ** x_ptr = (void **) malloc(sizeof(void**) * num_dev+1); 
   if (!x_ptr) {
@@ -53,19 +89,20 @@ int main()
   // Add host pointer 
   x_ptr[num_dev]=&x_arr[0];
 
-  printf("[Broadcast Int Array]\n");
+  printf("[Broadcast Int Array Size = %zu]\n", size);
   printf("No. of Devices: %d\n", omp_get_num_devices());
   
 //**************************************************//
-//                   Host-to-all                    //
+//                   Host-to-All                    //
 //**************************************************//
-
+/*
   for (int i=0; i<arr_len; ++i)
     x_arr[i]=i+10;
 
-  printf("Host-to-all\n");
-  print_hval(x_arr);
+  // printf("Host-to-All\n");
+  if (v_flag) print_hval(x_arr);
 
+  start = omp_get_wtime(); 
   #pragma omp parallel num_threads(omp_get_num_devices()) shared(x_ptr)
   {
     cudaMemcpy(
@@ -75,20 +112,22 @@ int main()
       cudaMemcpyHostToDevice              // kind
     );
   }
-  
-  verify(x_ptr);
+  end = omp_get_wtime();
+  // printf( "%f seconds <<<<< Host-to-All\n", end - start);
+  printf( "%f\n", end - start);
+  if (v_flag) verify(x_ptr);
 
-
+*/
 //**************************************************//
-//            Host-to-one -> One-to-all             //
+//            Host-to-One -> One-to-All             //
 //**************************************************//
 
   for (int i=0; i<arr_len; ++i)
     x_arr[i]=i+20;
 
-  printf("Host-to-one -> One-to-all\n");
-  print_hval(x_arr);
-  
+  // printf("Host-to-One -> One-to-All\n");
+  if (v_flag) print_hval(x_arr);
+  start = omp_get_wtime(); 
   #pragma omp parallel num_threads(omp_get_num_devices()) shared(x_ptr)
   {
     #pragma omp single
@@ -102,30 +141,37 @@ int main()
           cudaMemcpyHostToDevice              // kind
         );
       for(int i=1; i<num_dev; ++i)
-        #pragma omp task depend(in:dependency) firstprivate(i)
+        #pragma omp task depend(in:dependency) firstprivate(i) private (c_error)
+        {
           // cudaSetDevice(dev);
-          cudaMemcpy(
-            x_ptr[i],                         // dst
-            x_ptr[0],                         // src
-            size,                             // length 
-            cudaMemcpyDeviceToDevice          // kind
+          c_error = cudaMemcpyPeer(
+            x_ptr[i],                         // dst ptr
+            i,                                // dst_device_num
+            x_ptr[0],                         // src ptr
+            0,                                // src ptr_device_num
+            size                              // length 
           );
+          printf("code: %d, reason: %s\n", c_error, cudaGetErrorString(c_error));
+        }
     }
   }
   #pragma omp taskwait
-  verify(x_ptr);
+  end = omp_get_wtime();
+  // printf( "%f seconds <<<<< Host-to-One -> One-to-All\n", end - start);
+  printf( "%f\n", end - start);
+  if (v_flag) verify(x_ptr);
 
 
 //**************************************************//
-//            Host-to-one -> Binary tree            //
+//            Host-to-One -> Binary tree            //
 //**************************************************//
-
+/*
   for (int i=0; i<arr_len; ++i)
     x_arr[i]=i+30;
 
-  printf("Host-to-one -> Binary tree\n");
-  print_hval(x_arr);
-  
+  // printf("Host-to-One -> Binary tree\n");
+  if (v_flag) print_hval(x_arr);
+  start = omp_get_wtime(); 
   #pragma omp parallel num_threads(omp_get_num_devices()) shared(x_ptr)
   {
     #pragma omp single
@@ -150,19 +196,22 @@ int main()
     }
   }
   #pragma omp taskwait
-  verify(x_ptr);
+  end = omp_get_wtime();
+  // printf( "%f seconds <<<<< Host-to-one -> Binary tree\n", end - start);
+  printf( "%f\n", end - start);
+  if (v_flag) verify(x_ptr);
 
-
+*/
 //**************************************************//
-//               Host-to-Binary tree                //
+//               Host-to-Binary Tree                //
 //**************************************************//
-
+/*
   for (int i=0; i<arr_len; ++i)
     x_arr[i]=i+40;
   
-  printf("Host-to-Binary tree\n");
-  print_hval(x_arr);
-  
+  // printf("Host-to-Binary Tree\n");
+  if (v_flag) print_hval(x_arr);
+  start = omp_get_wtime();  
   #pragma omp parallel num_threads(omp_get_num_devices()) shared(x_ptr)
   {
     #pragma omp single
@@ -195,19 +244,22 @@ int main()
     }
   }
   #pragma omp taskwait
-  verify(x_ptr);
+  end = omp_get_wtime();
+  // printf( "%f seconds <<<<< Host-to-Binary Tree\n", end - start);
+  printf( "%f\n", end - start);
+  if (v_flag) verify(x_ptr);
 
-
+*/
 //**************************************************//
-//            Host-to-one -> Linked List            //
+//            Host-to-One -> Linked List            //
 //**************************************************//
-
+/*
   for (int i=0; i<arr_len; ++i)
     x_arr[i]=i+50;
   
-  printf("Host-to-one -> Linked List\n");
-  print_hval(x_arr);
-  
+  // printf("Host-to-one -> Linked List\n");
+  if (v_flag) print_hval(x_arr);
+  start = omp_get_wtime();  
   #pragma omp parallel num_threads(omp_get_num_devices()) shared(x_ptr)
   {
     #pragma omp single
@@ -231,19 +283,21 @@ int main()
     }
   }
   #pragma omp taskwait
-  verify(x_ptr);
-
-
+  end = omp_get_wtime();
+  // printf("%f seconds <<<<< Host-to-one -> Linked List\n", end - start);
+  printf( "%f\n", end - start);
+  if (v_flag) verify(x_ptr);
+*/
 //**************************************************//
 //           Host-to-Splited Linked List            //
 //**************************************************//
-
+/*
   for (int i=0; i<arr_len; ++i)
     x_arr[i]=i+60;
   
-  printf("Host-to-Splited Linked List\n");
-  print_hval(x_arr);
-  
+  // printf("Host-to-Splited Linked List\n");
+  if (v_flag) print_hval(x_arr);
+  start = omp_get_wtime();  
   #pragma omp parallel num_threads(omp_get_num_devices()) shared(x_ptr)
   {
     #pragma omp single
@@ -282,10 +336,12 @@ int main()
     }
   }
   #pragma omp taskwait
-  verify(x_ptr);
-
+  end = omp_get_wtime();
+  // printf("%f seconds <<<<< Host-to-one -> Splited Linked List\n", end - start);
+  printf( "%f\n", end - start);
+  if (v_flag) verify(x_ptr);
+*/
   free(x_ptr);
-
 
   return 0;
 }
@@ -302,3 +358,6 @@ int main()
 
 
 //gcc -I/usr/local/cuda/include -L/usr/local/cuda/lib64 -lcudart
+
+// PROG=./tests/broadcast_14; clang++ -fopenmp -fopenmp-targets=nvptx64 -o $PROG.x --cuda-gpu-arch=sm_70 -L/soft/compilers/cuda/cuda-11.0.2/lib64 -L/soft/compilers/cuda/cuda-11.0.2/targets/x86_64-linux/lib/ -I/soft/compilers/cuda/cuda-11.0.2/include -ldl -lcudart -pthread $PROG.cpp
+// ./

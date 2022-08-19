@@ -16,13 +16,13 @@ int arr_len = 10;
 
 bool v_flag = true; // Print verifications True=On False=Off
 
-void verify(void ** x_ptr){
+void verify(void ** x_ptr, int * n_dev){
   int num_dev = omp_get_num_devices();  
   int num_dev_0 = 2;  
 
   for(int i=0; i<num_dev_0; ++i)
   {
-    #pragma omp target device(i) map(x_ptr[i]) 
+    #pragma omp target device(n_dev[i]) map(x_ptr[i]) 
     {
       int* x = (int*)x_ptr[i];
       printf("%s No. %d ArrX = ", omp_is_initial_device()?"Host":"Device", omp_get_device_num());
@@ -74,9 +74,8 @@ int main()
   n_dev[1]=0;
 
   // Allocate device memory
-  for (int dev = 0; dev < num_dev_0; ++dev){
-    x_ptr[dev] = omp_target_alloc(size, 0);
-  }
+  for (int dev = 0; dev < num_dev_0; ++dev)
+    x_ptr[dev] = omp_target_alloc(size, n_dev[dev]);
 
   for (int i=0; i<arr_len; ++i)
     x_arr[i]=i+10;
@@ -85,12 +84,12 @@ int main()
     if (v_flag) print_hval(x_arr);
 
   start = omp_get_wtime(); 
-  #pragma omp parallel num_threads(num_dev_0) shared(x_ptr)
+  #pragma omp parallel num_threads(num_dev_0) shared(x_ptr, n_dev)
   {
     #pragma omp task
       omp_target_memcpy(
         x_ptr[0],                           // dst ptr (D0)
-        x_ptr[num_dev_0],                   // src ptr (Host)
+        x_ptr[omp_get_initial_device()],    // src ptr (Host)
         size,                               // length 
         0,                                  // dst_offset
         0,                                  // src_offset, 
@@ -100,7 +99,7 @@ int main()
     #pragma omp task
       omp_target_memcpy(
         x_ptr[1],                           // dst ptr (D0)
-        x_ptr[num_dev_0],                   // src ptr (Host)
+        x_ptr[omp_get_initial_device()],    // src ptr (Host)
         size,                               // length 
         0,                                  // dst_offset
         0,                                  // src_offset, 
@@ -112,12 +111,12 @@ int main()
   end = omp_get_wtime();
 
   printf( "Time %f (s)\n", end - start);
-  if (v_flag) verify(x_ptr);
+  if (v_flag) verify(x_ptr, n_dev);
 
 //******************************************************//
 //      Host-to-D0 / D0-to-D1 (omp_target_memcpy)       //
 //******************************************************//
-  
+/*
   // Allocate device memory
   for (int dev = 0; dev < num_dev; ++dev){
     x_ptr[dev] = omp_target_alloc(size, dev);
@@ -128,7 +127,7 @@ int main()
 
   // print_hval(x_arr);
 
-  printf("Host-to-one -> One-to-all\n");
+  printf("H-to-D0 / H-to-all\n");
   start = omp_get_wtime(); 
   #pragma omp parallel num_threads(omp_get_num_devices()) shared(x_ptr)
   {
@@ -163,11 +162,11 @@ int main()
   printf( ">>>>> %f seconds <<<<< Host-to-one -> One-to-all\n", end - start);
   // verify(x_ptr);
 
-
+/*
 //******************************************************//
 // Host-to-D0 / Host-to-D1 (cudaMemcpy/cudaMemcpyPeer)  //
 //******************************************************//
-
+/*
   // Allocate device memory
   for (int dev = 0; dev < num_dev; ++dev){
     cudaSetDevice(dev);
@@ -177,7 +176,7 @@ int main()
   for (int i=0; i<arr_len; ++i)
     x_arr[i]=i+20;
 
-  // printf("Host-to-One -> One-to-All\n");
+  // printf("H->D0 One-to-All\n");
   if (v_flag) print_hval(x_arr);
 
   start = omp_get_wtime(); 
@@ -209,7 +208,7 @@ int main()
 
   printf( "Time %f (s)\n", end - start);
   if (v_flag) verify(x_ptr);
-
+*/
   free(x_ptr);
 
   return 0;

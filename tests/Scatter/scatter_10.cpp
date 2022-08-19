@@ -182,6 +182,9 @@ int main()
     printf("Device %d -> has %d Descendants -> size is %zu, offset is %zu \n", dev, n_desc, ct_size[dev], ct_size[dev+num_dev]);
   }
 
+  for (int dev = 1; dev < num_dev; ++dev)
+    x_ptr[dev] = omp_target_alloc(ct_size[dev], dev);
+
   printf("Host-to-one -> Binary tree\n");
   #pragma omp parallel num_threads(omp_get_num_devices()) shared(x_ptr, ct_size)
   {
@@ -417,3 +420,7 @@ int main()
 
   return 0;
 }
+
+// PROG=scatter_10; clang++ -fopenmp -fopenmp-targets=nvptx64 -o $PROG.x --cuda-gpu-arch=sm_70 -L/soft/compilers/cuda/cuda-11.0.2/lib64 -L/soft/compilers/cuda/cuda-11.0.2/targets/x86_64-linux/lib/ -I/soft/compilers/cuda/cuda-11.0.2/include -ldl -lcudart -pthread $PROG.cpp
+// ./scatter_10.x 
+// nvprof --print-gpu-trace ./scatter_10.x 
