@@ -3,3 +3,5 @@
 *.cobaltlog
 *.error
 *.output
+*results*
+*.o
