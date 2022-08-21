@@ -104,7 +104,7 @@ int main()
   // Depends deps;
   Dep * dep_arr;
 
-  printf("[Broadcast NDev: %d Int ASize = %zu] \n", omp_get_num_devices(), size);
+  printf("Broadcast NDev: %d Int ASize = %zu \n", omp_get_num_devices(), size);
 
 //**************************************************//
 //            Host-to-all (Sequential)              //
@@ -144,7 +144,7 @@ int main()
   if (v_flag) printf("Host-to-all (Parallel)\n");
 
   // Initialize Array Values
-  v_no = init_arr(x_arr, v_no, arr_len);
+  if (v_flag) v_no = init_arr(x_arr, v_no, arr_len);
   
   if (v_flag) print_hval(x_arr, arr_len);
 
@@ -185,7 +185,7 @@ int main()
   if (v_flag) printf("Host-to-Main -> Main-to-local\n");
   
   // Initialize Array Values
-  v_no = init_arr(x_arr, v_no, arr_len);
+  if (v_flag) v_no = init_arr(x_arr, v_no, arr_len);
 
   if (v_flag) print_hval(x_arr, arr_len);
 
@@ -228,43 +228,46 @@ int main()
   #pragma omp parallel num_threads(omp_get_num_devices()) shared(x_ptr, main_arr, sec_dep_arr)
   {
     #pragma omp single
-    start = omp_get_wtime(); 
     {
-      for (int i=0; i<main_no; ++i){
-        #pragma omp task depend(out:main_arr[i]) firstprivate(i) shared(x_ptr, main_arr, sec_dep_arr)
+    start = omp_get_wtime(); 
+    }
+    for (int i=0; i<main_no; ++i){
+      #pragma omp task depend(out:main_arr[i]) firstprivate(i) shared(x_ptr, main_arr, sec_dep_arr)
+      {
+        // printf("To Main %d\n", main_arr[i]);
+        omp_target_memcpy(
+          x_ptr[main_arr[i]],                 // dst
+          x_ptr[omp_get_initial_device()],    // src
+          size,                               // length 
+          0,                                  // dst_offset
+          0,                                  // src_offset, 
+          main_arr[i],                        // dst_device_num
+          omp_get_initial_device()            // src_device_num
+        );
+      }
+    }
+    for (int i=0; i<main_no; ++i){
+      for (int j=0; j<sec_no; ++j){
+        int m_n = sec_dep_arr[i*sec_no+j+n_deps];
+        int s_n = sec_dep_arr[i*sec_no+j];
+        #pragma omp task depend(in:main_arr[i]) firstprivate(m_n, s_n) shared(x_ptr, main_arr, sec_dep_arr)
         {
-          // printf("To Main %d\n", main_arr[i]);
+          // printf("Main %d -> Local %d \n", m_n, s_n);
           omp_target_memcpy(
-            x_ptr[main_arr[i]],                 // dst
-            x_ptr[omp_get_initial_device()],    // src
-            size,                               // length 
-            0,                                  // dst_offset
-            0,                                  // src_offset, 
-            main_arr[i],                        // dst_device_num
-            omp_get_initial_device()            // src_device_num
+            x_ptr[s_n],                       // dst
+            x_ptr[m_n],                       // src
+            size,                             // length 
+            0,                                // dst_offset
+            0,                                // src_offset, 
+            s_n,                              // dst_device_num
+            m_n                               // src_device_num
           );
         }
       }
-      for (int i=0; i<main_no; ++i){
-        for (int j=0; j<sec_no; ++j){
-          int m_n = sec_dep_arr[i*sec_no+j+n_deps];
-          int s_n = sec_dep_arr[i*sec_no+j];
-          #pragma omp task depend(in:main_arr[i]) firstprivate(m_n, s_n) shared(x_ptr, main_arr, sec_dep_arr)
-          {
-            // printf("Main %d -> Local %d \n", m_n, s_n);
-            omp_target_memcpy(
-              x_ptr[s_n],                       // dst
-              x_ptr[m_n],                       // src
-              size,                             // length 
-              0,                                // dst_offset
-              0,                                // src_offset, 
-              s_n,                              // dst_device_num
-              m_n                               // src_device_num
-            );
-          }
-        }
-      }
-      #pragma omp taskwait
+    }
+    #pragma omp taskwait
+    #pragma omp single
+    {
       end = omp_get_wtime();
     } 
   }
@@ -285,7 +288,7 @@ int main()
   if (v_flag) printf("Half & Half\n");
   
   // Initialize Array Values
-  v_no = init_arr(x_arr, v_no, arr_len);
+  if (v_flag) if (v_flag) v_no = init_arr(x_arr, v_no, arr_len);
 
   if (v_flag) print_hval(x_arr, arr_len);
 
@@ -331,41 +334,44 @@ int main()
     #pragma omp single
     {
       start = omp_get_wtime(); 
-      for (int i=0; i<main_no; ++i){
-        #pragma omp task depend(out:main_arr[i]) firstprivate(i) shared(x_ptr, main_arr, sec_dep_arr)
+    }
+    for (int i=0; i<main_no; ++i){
+      #pragma omp task depend(out:main_arr[i]) firstprivate(i) shared(x_ptr, main_arr, sec_dep_arr)
+      {
+        // printf("To Main %d\n", main_arr[i]);
+        omp_target_memcpy(
+          x_ptr[main_arr[i]],                 // dst
+          x_ptr[omp_get_initial_device()],    // src
+          size,                               // length 
+          0,                                  // dst_offset
+          0,                                  // src_offset, 
+          main_arr[i],                        // dst_device_num
+          omp_get_initial_device()            // src_device_num
+        );
+      }
+    }
+    for (int i=0; i<main_no; ++i){
+      for (int j=0; j<sec_no; ++j){
+        int m_n = sec_dep_arr[i*sec_no+j+n_deps];
+        int s_n = sec_dep_arr[i*sec_no+j];
+        #pragma omp task depend(in:main_arr[i]) firstprivate(m_n, s_n) shared(x_ptr, main_arr, sec_dep_arr)
         {
-          // printf("To Main %d\n", main_arr[i]);
+          // printf("Main %d -> Local %d \n", m_n, s_n);
           omp_target_memcpy(
-            x_ptr[main_arr[i]],                 // dst
-            x_ptr[omp_get_initial_device()],    // src
-            size,                               // length 
-            0,                                  // dst_offset
-            0,                                  // src_offset, 
-            main_arr[i],                        // dst_device_num
-            omp_get_initial_device()            // src_device_num
+            x_ptr[s_n],                       // dst
+            x_ptr[m_n],                       // src
+            size,                             // length 
+            0,                                // dst_offset
+            0,                                // src_offset, 
+            s_n,                              // dst_device_num
+            m_n                               // src_device_num
           );
         }
       }
-      for (int i=0; i<main_no; ++i){
-        for (int j=0; j<sec_no; ++j){
-          int m_n = sec_dep_arr[i*sec_no+j+n_deps];
-          int s_n = sec_dep_arr[i*sec_no+j];
-          #pragma omp task depend(in:main_arr[i]) firstprivate(m_n, s_n) shared(x_ptr, main_arr, sec_dep_arr)
-          {
-            // printf("Main %d -> Local %d \n", m_n, s_n);
-            omp_target_memcpy(
-              x_ptr[s_n],                       // dst
-              x_ptr[m_n],                       // src
-              size,                             // length 
-              0,                                // dst_offset
-              0,                                // src_offset, 
-              s_n,                              // dst_device_num
-              m_n                               // src_device_num
-            );
-          }
-        }
-      }
-      #pragma omp taskwait
+    }
+    #pragma omp taskwait
+    #pragma omp single
+    {
       end = omp_get_wtime();
     }
   }
@@ -386,7 +392,7 @@ int main()
   if (v_flag) printf("Host to Mid -> Mid to Mid\n");
   
   // Initialize Array Values
-  v_no = init_arr(x_arr, v_no, arr_len);
+  if (v_flag) v_no = init_arr(x_arr, v_no, arr_len);
 
   if (v_flag) print_hval(x_arr, arr_len);
 
@@ -431,41 +437,44 @@ int main()
     #pragma omp single
     {
       start = omp_get_wtime(); 
-      for (int i=0; i<main_no; ++i){
-        #pragma omp task depend(out:main_arr[i]) firstprivate(i) shared(x_ptr, main_arr, sec_dep_arr)
+    }
+    for (int i=0; i<main_no; ++i){
+      #pragma omp task depend(out:main_arr[i]) firstprivate(i) shared(x_ptr, main_arr, sec_dep_arr)
+      {
+        // printf("To Main %d\n", main_arr[i]);
+        omp_target_memcpy(
+          x_ptr[main_arr[i]],                 // dst
+          x_ptr[omp_get_initial_device()],    // src
+          size,                               // length 
+          0,                                  // dst_offset
+          0,                                  // src_offset, 
+          main_arr[i],                        // dst_device_num
+          omp_get_initial_device()            // src_device_num
+        );
+      }
+    }
+    for (int i=0; i<main_no; ++i){
+      for (int j=0; j<sec_no; ++j){
+        int m_n = sec_dep_arr[i*sec_no+j+n_deps];
+        int s_n = sec_dep_arr[i*sec_no+j];
+        #pragma omp task depend(in:main_arr[i]) firstprivate(m_n, s_n) shared(x_ptr, main_arr, sec_dep_arr)
         {
-          // printf("To Main %d\n", main_arr[i]);
+          // printf("Main %d -> Local %d \n", m_n, s_n);
           omp_target_memcpy(
-            x_ptr[main_arr[i]],                 // dst
-            x_ptr[omp_get_initial_device()],    // src
-            size,                               // length 
-            0,                                  // dst_offset
-            0,                                  // src_offset, 
-            main_arr[i],                        // dst_device_num
-            omp_get_initial_device()            // src_device_num
+            x_ptr[s_n],                       // dst
+            x_ptr[m_n],                       // src
+            size,                             // length 
+            0,                                // dst_offset
+            0,                                // src_offset, 
+            s_n,                              // dst_device_num
+            m_n                               // src_device_num
           );
         }
       }
-      for (int i=0; i<main_no; ++i){
-        for (int j=0; j<sec_no; ++j){
-          int m_n = sec_dep_arr[i*sec_no+j+n_deps];
-          int s_n = sec_dep_arr[i*sec_no+j];
-          #pragma omp task depend(in:main_arr[i]) firstprivate(m_n, s_n) shared(x_ptr, main_arr, sec_dep_arr)
-          {
-            // printf("Main %d -> Local %d \n", m_n, s_n);
-            omp_target_memcpy(
-              x_ptr[s_n],                       // dst
-              x_ptr[m_n],                       // src
-              size,                             // length 
-              0,                                // dst_offset
-              0,                                // src_offset, 
-              s_n,                              // dst_device_num
-              m_n                               // src_device_num
-            );
-          }
-        }
-      }
-      #pragma omp taskwait
+    }
+    #pragma omp taskwait
+    #pragma omp single
+    {
       end = omp_get_wtime();
     }
   }
@@ -487,7 +496,7 @@ int main()
   if (v_flag) printf("Host to Half -> Half to Secondary\n");
   
   // Initialize Array Values
-  v_no = init_arr(x_arr, v_no, arr_len);
+  if (v_flag) v_no = init_arr(x_arr, v_no, arr_len);
 
   if (v_flag) print_hval(x_arr, arr_len);
 
@@ -536,41 +545,44 @@ int main()
     #pragma omp single
     {
       start = omp_get_wtime(); 
-      for (int i=0; i<main_no; ++i){
-        #pragma omp task depend(out:main_arr[i]) firstprivate(i) shared(x_ptr, main_arr, sec_dep_arr)
+    }
+    for (int i=0; i<main_no; ++i){
+      #pragma omp task depend(out:main_arr[i]) firstprivate(i) shared(x_ptr, main_arr, sec_dep_arr)
+      {
+        // printf("To Main %d\n", main_arr[i]);
+        omp_target_memcpy(
+          x_ptr[main_arr[i]],                 // dst
+          x_ptr[omp_get_initial_device()],    // src
+          size,                               // length 
+          0,                                  // dst_offset
+          0,                                  // src_offset, 
+          main_arr[i],                        // dst_device_num
+          omp_get_initial_device()            // src_device_num
+        );
+      }
+    }
+    for (int i=0; i<main_no; ++i){
+      for (int j=0; j<sec_no; ++j){
+        int m_n = sec_dep_arr[i*sec_no+j+n_deps];
+        int s_n = sec_dep_arr[i*sec_no+j];
+        #pragma omp task depend(in:main_arr[i]) firstprivate(m_n, s_n) shared(x_ptr, main_arr, sec_dep_arr)
         {
-          // printf("To Main %d\n", main_arr[i]);
+          // printf("Main %d -> Local %d \n", m_n, s_n);
           omp_target_memcpy(
-            x_ptr[main_arr[i]],                 // dst
-            x_ptr[omp_get_initial_device()],    // src
-            size,                               // length 
-            0,                                  // dst_offset
-            0,                                  // src_offset, 
-            main_arr[i],                        // dst_device_num
-            omp_get_initial_device()            // src_device_num
+            x_ptr[s_n],                       // dst
+            x_ptr[m_n],                       // src
+            size,                             // length 
+            0,                                // dst_offset
+            0,                                // src_offset, 
+            s_n,                              // dst_device_num
+            m_n                               // src_device_num
           );
         }
       }
-      for (int i=0; i<main_no; ++i){
-        for (int j=0; j<sec_no; ++j){
-          int m_n = sec_dep_arr[i*sec_no+j+n_deps];
-          int s_n = sec_dep_arr[i*sec_no+j];
-          #pragma omp task depend(in:main_arr[i]) firstprivate(m_n, s_n) shared(x_ptr, main_arr, sec_dep_arr)
-          {
-            // printf("Main %d -> Local %d \n", m_n, s_n);
-            omp_target_memcpy(
-              x_ptr[s_n],                       // dst
-              x_ptr[m_n],                       // src
-              size,                             // length 
-              0,                                // dst_offset
-              0,                                // src_offset, 
-              s_n,                              // dst_device_num
-              m_n                               // src_device_num
-            );
-          }
-        }
-      }
-      #pragma omp taskwait
+    }
+    #pragma omp taskwait
+    #pragma omp single
+    {
       end = omp_get_wtime();
     }
   }
@@ -593,7 +605,7 @@ int main()
   if (v_flag) printf("Host to Main -> Main to Secondary\n");
   
   // Initialize Array Values
-  v_no = init_arr(x_arr, v_no, arr_len);
+  if (v_flag) v_no = init_arr(x_arr, v_no, arr_len);
 
   if (v_flag) print_hval(x_arr, arr_len);
 
@@ -630,30 +642,33 @@ int main()
   {
     #pragma omp single
     {
-      start = omp_get_wtime(); 
-      for(int i=0; i<num_dev/2; ++i){
-        #pragma omp task depend(out:dep_arr[i])
-          omp_target_memcpy(
-            x_ptr[dep_arr[i].sec],              // dst
-            x_ptr[dep_arr[i].main],             // src
-            size,                               // length 
-            0,                                  // dst_offset
-            0,                                  // src_offset, 
-            dep_arr[i].sec,                     // dst_device_num
-            dep_arr[i].main                     // src_device_num
-          );
-        #pragma omp task depend(in:dep_arr[i])
-          omp_target_memcpy(
-            x_ptr[dep_arr[i+num_dev/2].sec],    // dst
-            x_ptr[dep_arr[i+num_dev/2].main],   // src
-            size,                               // length 
-            0,                                  // dst_offset
-            0,                                  // src_offset, 
-            dep_arr[i+num_dev/2].sec,           // dst_device_num
-            dep_arr[i+num_dev/2].main           // src_device_num
-          );
-      }
-      #pragma omp taskwait
+      start = omp_get_wtime();
+    } 
+    for(int i=0; i<num_dev/2; ++i){
+      #pragma omp task depend(out:dep_arr[i])
+        omp_target_memcpy(
+          x_ptr[dep_arr[i].sec],              // dst
+          x_ptr[dep_arr[i].main],             // src
+          size,                               // length 
+          0,                                  // dst_offset
+          0,                                  // src_offset, 
+          dep_arr[i].sec,                     // dst_device_num
+          dep_arr[i].main                     // src_device_num
+        );
+      #pragma omp task depend(in:dep_arr[i])
+        omp_target_memcpy(
+          x_ptr[dep_arr[i+num_dev/2].sec],    // dst
+          x_ptr[dep_arr[i+num_dev/2].main],   // src
+          size,                               // length 
+          0,                                  // dst_offset
+          0,                                  // src_offset, 
+          dep_arr[i+num_dev/2].sec,           // dst_device_num
+          dep_arr[i+num_dev/2].main           // src_device_num
+        );
+    }
+    #pragma omp taskwait
+    #pragma omp single
+    {
       end = omp_get_wtime();
     }
   }
@@ -674,7 +689,7 @@ free (dep_arr);
   if (v_flag) printf("Host-to-one -> Linked List\n");
   
   // Initialize Array Values
-  v_no = init_arr(x_arr, v_no, arr_len);
+  if (v_flag) v_no = init_arr(x_arr, v_no, arr_len);
   
   if (v_flag) print_hval(x_arr, arr_len);
 
@@ -726,6 +741,7 @@ free (dep_arr);
     #pragma omp single
     {
       start = omp_get_wtime();
+    }
       #pragma omp task depend(out:dep_arr[0])
         omp_target_memcpy(
           x_ptr[0],                           // dst
@@ -748,6 +764,8 @@ free (dep_arr);
           dep_arr[i].main                     // src_device_num
         );
       #pragma omp taskwait
+    #pragma omp single
+    {
       end = omp_get_wtime();
     }
   }
@@ -768,7 +786,7 @@ free (dep_arr);
   if (v_flag) printf("Splited Linked List\n");
 
   // Initialize Array Values
-  v_no = init_arr(x_arr, v_no, arr_len);
+  if (v_flag) v_no = init_arr(x_arr, v_no, arr_len);
   
   if (v_flag) print_hval(x_arr, arr_len);
   
@@ -778,6 +796,7 @@ free (dep_arr);
     #pragma omp single
     {
       start = omp_get_wtime();
+    }
       int dep_arr[num_dev];
       #pragma omp task depend(out:dep_arr[0])
         omp_target_memcpy(
@@ -822,6 +841,8 @@ free (dep_arr);
         );
       }
       #pragma omp taskwait
+    #pragma omp single
+    {
       end = omp_get_wtime();
     }
   }
