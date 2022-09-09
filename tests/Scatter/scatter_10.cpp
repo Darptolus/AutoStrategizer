@@ -64,7 +64,7 @@ int main()
   // Add host pointer 
   x_ptr[num_dev]=&x_arr[0];
 
-  printf("[Broadcast Int Array]\n");
+  printf("[Scatter Int Array]\n");
   printf("No. of Devices: %d\n", num_dev);
   
 //**************************************************//

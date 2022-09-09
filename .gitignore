@@ -3,5 +3,8 @@
 *.cobaltlog
 *.error
 *.output
+*.nsys-rep
+*.qdrep
+*.sqlite
 *results*
 *.o
