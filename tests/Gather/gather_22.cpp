@@ -3,7 +3,7 @@
 #include <cstdlib>
 #include <math.h>
 
-const bool v_flag = false; // Print verifications True=On False=Off
+const bool v_flag = true; // Print verifications True=On False=Off
 
 int num_dev = omp_get_num_devices();
 
@@ -35,6 +35,12 @@ int init_arr(int * x_arr, int v_no, int arr_len){
   for (int i=0; i<arr_len; ++i)
     x_arr[i]=i+v_no;
   return (v_no+=10);
+}
+
+void zero_arr(int * x_arr, int arr_len){
+  // Initialize Array Values
+  for (int i=0; i<arr_len; ++i)
+    x_arr[i]=0;
 }
 
 int main()
@@ -74,7 +80,7 @@ int main()
   // Add host pointer 
   x_ptr[num_dev]=&x_arr[0];
 
-  printf("[Scatter No. Dev: %d Int Array Size = %zu] \n", omp_get_num_devices(), c_size);
+  printf("[Gather No. Dev: %d Int Array Size = %zu] \n", omp_get_num_devices(), c_size);
 
 //**************************************************//
 //            Host-to-all (Sequential)              //
@@ -93,7 +99,6 @@ int main()
     x_ptr[dev] = omp_target_alloc(c_size, dev);
   }
   
-  start = omp_get_wtime(); 
   for (int dev = 0; dev < num_dev; ++dev)
   {
     omp_target_memcpy(
@@ -107,10 +112,30 @@ int main()
     );
   }
 
+  if (v_flag) zero_arr(x_arr, arr_len);
+  if (v_flag) print_hval(x_arr, arr_len);
+
+  start = omp_get_wtime(); 
+  for (int dev = 0; dev < num_dev; ++dev)
+  {
+    omp_target_memcpy(
+      x_ptr[omp_get_initial_device()],    // dst
+      x_ptr[dev],                         // src
+      c_size,                             // length 
+      c_size*dev,                         // dst_offset
+      0,                                  // src_offset, 
+      omp_get_initial_device(),           // dst_device_num
+      dev                                 // src_device_num
+    );
+  }
+
   end = omp_get_wtime();
   if (v_flag) printf( "Time %f (s)\n", end - start);
   else printf( "%f\n", end - start);
+
   if (v_flag) verify(x_ptr, chnk_len);
+
+  if (v_flag) print_hval(x_arr, arr_len);
 
   for (int dev = 0; dev < num_dev; ++dev)
     omp_target_free(x_ptr[dev], dev);
@@ -135,10 +160,6 @@ int main()
 
   #pragma omp parallel num_threads(omp_get_num_devices()) shared(x_ptr)
   {
-    #pragma omp single
-    {
-      start = omp_get_wtime();
-    }
     int dev = omp_get_thread_num();
     omp_target_memcpy(
       x_ptr[dev],                         // dst
@@ -150,6 +171,28 @@ int main()
       omp_get_initial_device()            // src_device_num
     );
     #pragma omp barrier
+  }
+
+  if (v_flag) zero_arr(x_arr, arr_len);
+  if (v_flag) print_hval(x_arr, arr_len);
+
+  #pragma omp parallel num_threads(omp_get_num_devices()) shared(x_ptr)
+  {
+    #pragma omp single
+    {
+      start = omp_get_wtime();
+    }
+    int dev = omp_get_thread_num();
+    omp_target_memcpy(
+      x_ptr[omp_get_initial_device()],    // dst
+      x_ptr[dev],                         // src
+      c_size,                             // length 
+      c_size*dev,                         // dst_offset
+      0,                                  // src_offset, 
+      omp_get_initial_device(),           // dst_device_num
+      dev                                 // src_device_num
+    );
+    #pragma omp barrier
     #pragma omp single
     {
       end = omp_get_wtime();
@@ -158,10 +201,11 @@ int main()
   }
 
   if (v_flag) printf( "Time %f (s)\n", end - start);
-  else printf( "%f\n", end - start);
+  else printf( "%f\n", end - start); 
 
-  
   if (v_flag) verify(x_ptr, chnk_len);
+
+  if (v_flag) print_hval(x_arr, arr_len);
 
   for (int dev = 0; dev < num_dev; ++dev)
     omp_target_free(x_ptr[dev], dev);
@@ -170,7 +214,7 @@ int main()
 //**************************************************//
 //         Host-to-Main -> Main-to-local v1         //
 //**************************************************//
-  
+
   if (v_flag) printf("Host-to-Main -> Main-to-local v1\n");
   
   // Initialize Array Values
@@ -226,7 +270,6 @@ int main()
   {
     #pragma omp single
     {
-      start = omp_get_wtime(); 
       for (int i=0; i<main_no; ++i){
         #pragma omp task depend(out:main_arr[i]) firstprivate(i) shared(x_ptr, main_arr, sec_dep_arr)
         {
@@ -262,6 +305,52 @@ int main()
         }
       }
       #pragma omp taskwait
+    }
+  }
+
+  if (v_flag) zero_arr(x_arr, arr_len);
+  if (v_flag) print_hval(x_arr, arr_len);
+
+  #pragma omp parallel num_threads(omp_get_num_devices()) shared(x_ptr, main_arr, sec_dep_arr)
+  {
+    #pragma omp single
+    {
+      start = omp_get_wtime(); 
+      for (int i=0; i<main_no; ++i){
+        for (int j=0; j<sec_no; ++j){
+          int m_n = sec_dep_arr[i*sec_no+j+n_deps];
+          int s_n = sec_dep_arr[i*sec_no+j];
+          #pragma omp task depend(in:main_arr[i]) firstprivate(m_n, s_n) shared(x_ptr, main_arr, sec_dep_arr)
+          {
+            // printf("Main %d -> Local %d \n", m_n, s_n);
+            omp_target_memcpy(
+              x_ptr[s_n],                       // dst
+              x_ptr[m_n],                       // src
+              c_size,                           // length 
+              0,                                // dst_offset
+              c_size*(j+1),                     // src_offset, 
+              s_n,                              // dst_device_num
+              m_n                               // src_device_num
+            );
+          }
+        }
+      }
+      for (int i=0; i<main_no; ++i){
+        #pragma omp task depend(out:main_arr[i]) firstprivate(i) shared(x_ptr, main_arr, sec_dep_arr)
+        {
+          // printf("To Main %d\n", main_arr[i]);
+          omp_target_memcpy(
+            x_ptr[main_arr[i]],                 // dst
+            x_ptr[omp_get_initial_device()],    // src
+            c_size*4,                           // length 
+            0,                                  // dst_offset
+            c_size*i*4,                         // src_offset, 
+            main_arr[i],                        // dst_device_num
+            omp_get_initial_device()            // src_device_num
+          );
+        }
+      }
+      #pragma omp taskwait
       end = omp_get_wtime();
     }
   }
@@ -271,6 +360,8 @@ int main()
 
   if (v_flag) verify(x_ptr, chnk_len);
 
+  if (v_flag) print_hval(x_arr, arr_len);
+
   free (main_arr);
   free (sec_dep_arr);
 
@@ -278,7 +369,7 @@ int main()
 //**************************************************//
 //         Host-to-Main -> Main-to-local v2         //
 //**************************************************//
-  
+/*
   if (v_flag) printf("Host-to-Main -> Main-to-local v2\n");
   
   // Initialize Array Values
@@ -401,11 +492,11 @@ int main()
 
   for (int dev = 0; dev < num_dev; ++dev)
     omp_target_free(x_ptr[dev], dev);
-
+*/
 //**************************************************//
 //         Host-to-Main -> Main-to-local v3         //
 //**************************************************//
-
+/*
   if (v_flag) printf("Host-to-Main -> Main-to-local v3\n");
   
   // Initialize Array Values
@@ -536,11 +627,11 @@ int main()
   for (int dev = 0; dev < num_dev; ++dev)
     omp_target_free(x_ptr[dev], dev);
 
-
+*/
 //**************************************************//
 //               Splitted Linked List               //
 //**************************************************//
-
+/*
   if (v_flag) printf("Splitted Linked List\n");
 
   // Initialize Array Values
@@ -677,7 +768,7 @@ int main()
 
   for (int dev = 0; dev < num_dev; ++dev)
     omp_target_free(x_ptr[dev], dev);
-
+*/
 //**************************************************//
 //         Splitted Linked List Not Ordered         //
 //**************************************************//
@@ -787,14 +878,14 @@ int main()
   return 0;
 }
 
-// PROG=scatter_22; clang++ -fopenmp -fopenmp-targets=nvptx64 -o $PROG.x --cuda-gpu-arch=sm_70 -L/soft/compilers/cuda/cuda-11.0.2/lib64 -L/soft/compilers/cuda/cuda-11.0.2/targets/x86_64-linux/lib/ -I/soft/compilers/cuda/cuda-11.0.2/include -ldl -lcudart -pthread $PROG.cpp
-// ./scatter_22.x 
-// nvprof --print-gpu-trace ./scatter_22.x 
-// ./scatter_22.x>scatter_22_val.o  2>&1
-// ./scatter_22.x 2>&1 | tee scatter_22_test.o
-// nsys profile -o scatter_22_prof --stats=true ./scatter_22.x
-// PROG=scatter_22; ASIZE=100M; nsys profile -o $PROG\_$ASIZE\_0 --stats=true ./$PROG.x
+// PROG=gather_22; clang++ -fopenmp -fopenmp-targets=nvptx64 -o $PROG.x --cuda-gpu-arch=sm_70 -L/soft/compilers/cuda/cuda-11.0.2/lib64 -L/soft/compilers/cuda/cuda-11.0.2/targets/x86_64-linux/lib/ -I/soft/compilers/cuda/cuda-11.0.2/include -ldl -lcudart -pthread $PROG.cpp
+// ./gather_22.x 
+// nvprof --print-gpu-trace ./gather_22.x 
+// ./gather_22.x>gather_22_val.o  2>&1
+// ./gather_22.x 2>&1 | tee gather_22_test.o
+// nsys profile -o gather_22_prof --stats=true ./gather_22.x
+// PROG=gather_22; ASIZE=100M; nsys profile -o $PROG\_$ASIZE\_0 --stats=true ./$PROG.x
 // paste -d"\t" results_s22_2/* 2>&1 | tee test.o
 // paste -d"\t" results_s22_2/*>test.o 2>&1 
-// paste -d"\t"  out_test_256.o out_test_2560.o out_test_25600.o out_test_262144.o out_test_2621440.o out_test_26214400.o out_test_209715200.o out_test_235929600.o>test.o 2>&1
+// paste -d"\t" out_test_256.o out_test_2560.o out_test_25600.o out_test_262144.o out_test_2621440.o out_test_26214400.o out_test_209715200.o out_test_235929600.o>test.o 2>&1
 

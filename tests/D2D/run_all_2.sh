@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-DIR_NAME="results_d2d_1"
+DIR_NAME="results_d2d_smx_0"
 mkdir $DIR_NAME
 
 # 15360; // 60 Kb
@@ -16,8 +16,10 @@ do
   for j in $(seq 0 11)
   do
     # echo "ARR_SZ = $ARR_SZ"
-    ./d2d_test_2.x>>./$DIR_NAME/out_test_$i.o  2>&1; wait
+    export OMP_PROC_BIND=spread 
+    taskset -c 0,1,22,23 ./d2d_test_7.x>>./$DIR_NAME/out_test_$i.o  2>&1; wait
     # ToDo: Add Paste
+    # paste -d"\t"  out_test_256.o out_test_2560.o out_test_25600.o out_test_262144.o out_test_2621440.o out_test_26214400.o out_test_209715200.o out_test_235929600.o>test.o 2>&1
   done
 done
 

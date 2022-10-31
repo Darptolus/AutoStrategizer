@@ -29,3 +29,4 @@ int main()
 // ./test_nvlink.x 
 // nvprof --print-gpu-trace ./test_nvlink.x 
 // PROG=test_nvlink; nvcc -o $PROG.x $PROG.cpp
+// nvidia-smi topo -m

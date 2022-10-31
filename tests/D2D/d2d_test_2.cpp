@@ -149,6 +149,7 @@ int main()
     #pragma omp single
     {
       int dep_0;
+      start = omp_get_wtime(); 
       #pragma omp task shared(x_ptr)
       {
         // printf("To Main %d\n", main_arr[i]);
@@ -175,8 +176,7 @@ int main()
           omp_get_initial_device()            // src_device_num
         );
       }
-      
-      #pragma omp task shared(x_ptr) depend(in:dep_0) shared(x_ptr)
+      #pragma omp task depend(in:dep_0) shared(x_ptr)
       {
         // printf("To Main %d\n", main_arr[i]);
         omp_target_memcpy(
@@ -223,6 +223,7 @@ int main()
   {
     #pragma omp single
     {
+      start = omp_get_wtime(); 
       int dep_0, dep_1;
       #pragma omp task shared(x_ptr)
       {
@@ -263,8 +264,7 @@ int main()
           omp_get_initial_device()            // src_device_num
         );
       }
-
-      #pragma omp task shared(x_ptr) depend(in:dep_0) shared(x_ptr)
+      #pragma omp task depend(in:dep_0) shared(x_ptr)
       {
         // printf("To Main %d\n", main_arr[i]);
         omp_target_memcpy(
@@ -277,7 +277,7 @@ int main()
           4                                   // src_device_num
         );
       }
-      #pragma omp task shared(x_ptr) depend(in:dep_1) shared(x_ptr)
+      #pragma omp task depend(in:dep_1) shared(x_ptr)
       {
         // printf("To Main %d\n", main_arr[i]);
         omp_target_memcpy(
@@ -310,8 +310,8 @@ int main()
   return 0;
 }
 
-// PROG=d2d_test_1; clang++ -fopenmp -fopenmp-targets=nvptx64 -o $PROG.x --cuda-gpu-arch=sm_70 -L/soft/compilers/cuda/cuda-11.0.2/lib64 -L/soft/compilers/cuda/cuda-11.0.2/targets/x86_64-linux/lib/ -I/soft/compilers/cuda/cuda-11.0.2/include -ldl -lcudart -pthread $PROG.cpp
-// ./d2d_test_1.x 
-// ./d2d_test_1.x>out_test.o  2>&1
-// nsys profile -o test_prof --stats=true ./d2d_test_1.x
-// nsys profile -o d2d_test_1_6G ./d2d_test_1.x
+// PROG=d2d_test_2; clang++ -fopenmp -fopenmp-targets=nvptx64 -o $PROG.x --cuda-gpu-arch=sm_70 -L/soft/compilers/cuda/cuda-11.0.2/lib64 -L/soft/compilers/cuda/cuda-11.0.2/targets/x86_64-linux/lib/ -I/soft/compilers/cuda/cuda-11.0.2/include -ldl -lcudart -pthread $PROG.cpp
+// ./d2d_test_2.x 
+// ./d2d_test_2.x>out_test.o  2>&1
+// nsys profile -o test_prof --stats=true ./d2d_test_2.x
+// nsys profile -o d2d_test_1_6G ./d2d_test_2.x
