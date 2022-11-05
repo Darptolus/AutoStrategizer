@@ -12,7 +12,7 @@ int main()
 {
   int n_dev = 0, n_net = 0, line_n = 0, word_n = 0, dev_a = 0, dev_b =0, n_nodes = 1, n_hst = 2, n_nma = 2, n_core = 0, nma_x;
   int n_org, n_dst;
-  int **hst_mx, **dev_mx, *d_org, *d_dst; 
+  int **hst_mx, **dev_mx, **hst_mx_cpy, **dev_mx_cpy, *d_org, *d_dst; 
 
   enum c_ops { D2D, BRC, SCT, GAT, RED } c_op;
   enum h_mth { H2D, DVT, MXF } h_mt; // Host-to-Device, Distant Vector, Max-Flow
@@ -67,9 +67,9 @@ int main()
             iss_a >> word;
             // cout << "here" << dev_b << n_dev << endl;
             if (word.compare("X") == 0) dev_mx[dev_a + n_hst][dev_b + n_hst] = 0;
-            else if (word.compare("NV1") == 0) dev_mx[dev_a + n_hst][dev_b + n_hst] = 25; // Based on experiments 22
-            else if (word.compare("NV2") == 0) dev_mx[dev_a + n_hst][dev_b + n_hst] = 50; // Based on experiments 45
-            else if (word.compare("SYS") == 0) dev_mx[dev_a + n_hst][dev_b + n_hst] = 6; // Based on experiments 6
+            else if (word.compare("NV1") == 0) dev_mx[dev_a + n_hst][dev_b + n_hst] = 25; // Based on experiments 22 GB/s
+            else if (word.compare("NV2") == 0) dev_mx[dev_a + n_hst][dev_b + n_hst] = 50; // Based on experiments 45 GB/s
+            else if (word.compare("SYS") == 0) dev_mx[dev_a + n_hst][dev_b + n_hst] = 6; // Based on experiments 6 GB/s
             else dev_mx[dev_a + n_hst][dev_b + n_hst] = -1;
           }
           // Skip network information // ***** Future_Work *****
@@ -100,8 +100,6 @@ int main()
           // cout << "here " << dev_a << " " << nma_x << " " << n_dev << endl;
           if(nma_x)
           {
-            // hst_mx[dev_a][0]=6;
-            // hst_mx[dev_a][1]=10;
             dev_mx[0][dev_a + n_hst]=6;
             dev_mx[1][dev_a + n_hst]=10;
             dev_mx[dev_a + n_hst][0]=6;
@@ -109,8 +107,6 @@ int main()
           }
           else
           {
-            // hst_mx[dev_a][0]=10;
-            // hst_mx[dev_a][1]=6;
             dev_mx[0][dev_a + n_hst]=10;
             dev_mx[1][dev_a + n_hst]=6;
             dev_mx[dev_a + n_hst][0]=10;
@@ -129,15 +125,15 @@ int main()
       if (line_n == 0)
       {
         // Allocate interconnectivity matrix
+        dev_mx = (int**) malloc((n_dev + n_hst) * sizeof(int*));
+        for (dev_a = 0; dev_a < (n_dev + n_hst); ++dev_a)
+          dev_mx[dev_a] = (int*)malloc((n_dev + n_hst) * sizeof(int));
+        
         // hst_mx = (int**) malloc(n_dev * sizeof(int*));
         // for (dev_a = 0; dev_a < n_dev; ++dev_a)
         //   hst_mx[dev_a] = (int*)malloc(n_hst * sizeof(int));
 
-        dev_mx = (int**) malloc((n_dev + n_hst) * sizeof(int*));
-        for (dev_a = 0; dev_a < (n_dev + n_hst); ++dev_a)
-          dev_mx[dev_a] = (int*)malloc((n_dev + n_hst) * sizeof(int));
-
-        // Initialize 
+        // Initialize variable dev_a
         dev_a = 0;
       }
       ++line_n;
@@ -147,7 +143,10 @@ int main()
   else cout << "Unable to open file"; 
 
 
-  // Fill Host to Device information
+  // Fill Host to Host information
+  dev_mx[0][1]=40; // Theoretically 38.4 GB/s
+  dev_mx[1][0]=40; // Theoretically 38.4 GB/s
+
 
   printf("DGX\n");
   cout << "no. Devices: " << n_dev << "\n";
@@ -190,78 +189,91 @@ int main()
 
   c_op = D2D;
   h_mt = H2D;
-
-  // Method
-  switch (h_mt)
+           
+  // Strategy
+  switch (c_op)
   {
-    case H2D:
-      printf("H2D\n");
-      for (dev_a = 0; dev_a < n_org; ++dev_a)
+    case D2D:
+      printf("D2D \n");
+      switch (h_mt)
       {
-        for (dev_b = 0; dev_b < n_dst; ++dev_b)
+        case H2D:
+        // Unidirectional one-to-one transfer between devices
+        printf("H2D\n");
+        for (dev_a = 0; dev_a < n_org; ++dev_a)
         {
-          // Check direct path //TODO: fill host to host info
-          // cout << "other" << endl;
-
-          if (dev_mx[d_org[dev_a]][d_dst[dev_b]]>0) 
-          {            
-            // Strategy
-            switch (c_op)
+          for (dev_b = 0; dev_b < n_dst; ++dev_b)
+          {
+            // Check direct path D2D
+            if (dev_mx[d_org[dev_a]][d_dst[dev_b]]>0) 
             {
-              case D2D:
-                printf("D2D \n");
-                
-
-                
-              break; // H2D
-
-              case BRC:
-                printf("Unsupported H/D combination\n");
-                printf("\n");
-
-              break; // DVT
-
-              case SCT:
-                printf("Unsupported H/D combination\n");
-                printf("\n");
-              
-              case GAT:
-                printf("Unsupported H/D combination\n");
-                printf("\n");
-
-              case RED:
-                printf("Unsupported H/D combination\n");
-                printf("\n");
-
-              break; // MXF
-
-              default:
-                printf("Invalid Method\n");
-                return 1;
+              //Remove available link
+              printf("Valid H/D combination\n");
+            }
+            else
+            {
+              printf("Invalid H/D combination\n");
             }
           }
-          else
-          {
-            printf("Invalid H/D combination\n");
-          }
         }
+
+        break; // H2D
+
+        default:
+          printf("Invalid Method\n");
+          return 1;
       }
+    break; // D2D
 
-    break; // H2D
+    case BRC:
+      printf("Unsupported H/D combination\n");
+      printf("\n");
+      switch (h_mt)
+      {
+        case H2D:
+        break; // H2D
 
-    case DVT:
-      printf("H2D\n");
+        default:
+          printf("Invalid Method\n");
+          return 1;
+      }
+    break; // BRC
 
-    break; // DVT
+    case SCT:
+      printf("Unsupported H/D combination\n");
+      printf("\n");
+    break; // 
+    
+    case GAT:
+      printf("Unsupported H/D combination\n");
+      printf("\n");
+    break; // 
 
-    case MXF:
+    case RED:
+      printf("Unsupported H/D combination\n");
       printf("\n");
 
-    break; // MXF
+    break; // RED
 
     default:
-      printf("Invalid Method\n");
+      printf("Invalid Operation\n");
       return 1;
+      
+      
+
+    // case DVT:
+    //   printf("H2D\n");
+
+    // break; // DVT
+
+    // case MXF:
+    //   printf("\n");
+
+    // break; // MXF
+
+    // default:
+    //   printf("Invalid Method\n");
+    //   return 1;
   }
   
 
