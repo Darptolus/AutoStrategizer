@@ -12,7 +12,7 @@ int main()
 {
   int n_dev = 0, n_net = 0, line_n = 0, word_n = 0, dev_a = 0, dev_b =0, n_nodes = 1, n_hst = 2, n_nma = 2, n_core = 0, nma_x;
   int n_org, n_dst;
-  int *hst_mx, **dev_mx, *d_org, *d_dst; 
+  int **hst_mx, **dev_mx, *d_org, *d_dst; 
 
   enum c_ops { D2D, BRC, SCT, GAT, RED } c_op;
   enum h_mth { H2D, DVT, MXF } h_mt; // Host-to-Device, Distant Vector, Max-Flow
@@ -66,43 +66,56 @@ int main()
           {
             iss_a >> word;
             // cout << "here" << dev_b << n_dev << endl;
-            if (word.compare("X") == 0) dev_mx[dev_a][dev_b] = 0;
-            // else if (word.compare("NV1") == 0) dev_mx[dev_a * n_dev + dev_b] = 25;
-            else if (word.compare("NV1") == 0) dev_mx[dev_a][dev_b] = 25;
-            // else if (word.compare("NV2") == 0) dev_mx[dev_a * n_dev + dev_b] = 50;
-            else if (word.compare("NV2") == 0) dev_mx[dev_a][dev_b] = 50;
-            // else if (word.compare("SYS") == 0) dev_mx[dev_a * n_dev + dev_b] = 10;
-            else if (word.compare("SYS") == 0) dev_mx[dev_a][dev_b] = 10;
-            // else dev_mx[dev_a * n_dev + dev_b] = -1;
-            else dev_mx[dev_a][dev_b] = -1;
+            if (word.compare("X") == 0) dev_mx[dev_a + n_hst][dev_b + n_hst] = 0;
+            else if (word.compare("NV1") == 0) dev_mx[dev_a + n_hst][dev_b + n_hst] = 25; // Based on experiments 22
+            else if (word.compare("NV2") == 0) dev_mx[dev_a + n_hst][dev_b + n_hst] = 50; // Based on experiments 45
+            else if (word.compare("SYS") == 0) dev_mx[dev_a + n_hst][dev_b + n_hst] = 6; // Based on experiments 6
+            else dev_mx[dev_a + n_hst][dev_b + n_hst] = -1;
           }
+          // Skip network information // ***** Future_Work *****
           for (int i = 0; i <= n_net; ++i) iss_a >> word;
           
-          // cout << word << endl;
           // Get CPU Affinity
-          for(int i = 0; i < word.length(); ++i)
-          {
-            if(word[i]==',' || word[i]=='-') word[i] = *strdup(" ");
-          }
+          // Replace separators with spaces
+          for(int i = 0; i < word.length(); ++i) if(word[i]==',' || word[i]=='-') word[i] = *strdup(" ");
 
           iss_b.clear();
           iss_b << word;
-          // while (!iss_b.eof()) {
           n_core = 0;
           while (iss_b >> word_b || n_core==3) {
-            // iss_b >> word_b;
             if (stringstream(word_b) >> numa_t.h_i[n_core]) ++n_core;
             //   cout << n_core << " ";
           }
+
           // Add numa information
           iss_a >> word;
           stringstream(word) >> nma_x;
+          // Check if new information and copy
           if (!numa_d[nma_x].conf){
             numa_d[nma_x] = numa_t;
             numa_d[nma_x].conf = 1;
           }
 
-          // Host to Device information ********** TODO ********** TODO ********** TODO ********** TODO ********** 
+          // Add Host to Device information 
+          // cout << "here " << dev_a << " " << nma_x << " " << n_dev << endl;
+          if(nma_x)
+          {
+            // hst_mx[dev_a][0]=6;
+            // hst_mx[dev_a][1]=10;
+            dev_mx[0][dev_a + n_hst]=6;
+            dev_mx[1][dev_a + n_hst]=10;
+            dev_mx[dev_a + n_hst][0]=6;
+            dev_mx[dev_a + n_hst][1]=10;
+          }
+          else
+          {
+            // hst_mx[dev_a][0]=10;
+            // hst_mx[dev_a][1]=6;
+            dev_mx[0][dev_a + n_hst]=10;
+            dev_mx[1][dev_a + n_hst]=6;
+            dev_mx[dev_a + n_hst][0]=10;
+            dev_mx[dev_a + n_hst][1]=6;
+          }
 
           // cout << word << endl;
           ++dev_a;
@@ -112,23 +125,20 @@ int main()
       //   // cout << "other" << '\n';
       //   // cout << word << " " << word.compare(0,3,"GPU") << endl;
       // }
-      }
+      } // End While: Get all words in a line 
       if (line_n == 0)
       {
         // Allocate interconnectivity matrix
-        
-        hst_mx = (int*) malloc((n_hst * n_dev) * sizeof(int));
+        // hst_mx = (int**) malloc(n_dev * sizeof(int*));
         // for (dev_a = 0; dev_a < n_dev; ++dev_a)
-        //   dev_mx[dev_a] = (int*)malloc(n_dev * sizeof(int));
-        // dev_mx = (int*) malloc((n_dev * n_dev) * sizeof(int*));
-        dev_mx = (int**) malloc(n_dev * sizeof(int*));
+        //   hst_mx[dev_a] = (int*)malloc(n_hst * sizeof(int));
 
-        for (dev_a = 0; dev_a < n_dev; ++dev_a)
-          dev_mx[dev_a] = (int*)malloc(n_dev * sizeof(int));
+        dev_mx = (int**) malloc((n_dev + n_hst) * sizeof(int*));
+        for (dev_a = 0; dev_a < (n_dev + n_hst); ++dev_a)
+          dev_mx[dev_a] = (int*)malloc((n_dev + n_hst) * sizeof(int));
 
         // Initialize 
         dev_a = 0;
-
       }
       ++line_n;
     }
@@ -144,11 +154,17 @@ int main()
   cout << "no. Ext Networks: " << n_net << "\n";
 
   // Print Interconnectivity Matrix
-  printf("Interconnectivity Matrix\n");
-  for (dev_a = 0; dev_a < n_dev; ++dev_a) {
-    for (dev_b = 0; dev_b < n_dev; ++dev_b)
-      // printf("%d ", dev_mx[dev_a * n_dev + dev_b]);
-      printf("%d ", dev_mx[dev_a][dev_b]);
+  // printf("H2D Interconnectivity Matrix\n");
+  // for (dev_a = 0; dev_a < n_hst; ++dev_a) {
+  //   for (dev_b = 0; dev_b < n_dev; ++dev_b)
+  //     // printf("%d ", dev_mx[dev_a * n_dev + dev_b]);
+  //     printf("%2d ", hst_mx[dev_b][dev_a]);
+  //   printf("\n");
+  // }
+  printf("D2D Interconnectivity Matrix\n");
+  for (dev_a = 0; dev_a < n_dev + n_hst; ++dev_a) {
+    for (dev_b = 0; dev_b < n_dev + n_hst; ++dev_b)
+      printf("%2d ", dev_mx[dev_a][dev_b]);
     printf("\n");
   }
 
@@ -169,13 +185,84 @@ int main()
   n_dst = 1;
   d_dst = (int*) malloc((n_dst) * sizeof(int*));
 
-  d_org[0]=-1;
-  d_dst[0]=0;
+  d_org[0]=0;
+  d_dst[0]=2;
 
   c_op = D2D;
   h_mt = H2D;
 
   // Method
+  switch (h_mt)
+  {
+    case H2D:
+      printf("H2D\n");
+      for (dev_a = 0; dev_a < n_org; ++dev_a)
+      {
+        for (dev_b = 0; dev_b < n_dst; ++dev_b)
+        {
+          // Check direct path //TODO: fill host to host info
+          // cout << "other" << endl;
+
+          if (dev_mx[d_org[dev_a]][d_dst[dev_b]]>0) 
+          {            
+            // Strategy
+            switch (c_op)
+            {
+              case D2D:
+                printf("D2D \n");
+                
+
+                
+              break; // H2D
+
+              case BRC:
+                printf("Unsupported H/D combination\n");
+                printf("\n");
+
+              break; // DVT
+
+              case SCT:
+                printf("Unsupported H/D combination\n");
+                printf("\n");
+              
+              case GAT:
+                printf("Unsupported H/D combination\n");
+                printf("\n");
+
+              case RED:
+                printf("Unsupported H/D combination\n");
+                printf("\n");
+
+              break; // MXF
+
+              default:
+                printf("Invalid Method\n");
+                return 1;
+            }
+          }
+          else
+          {
+            printf("Invalid H/D combination\n");
+          }
+        }
+      }
+
+    break; // H2D
+
+    case DVT:
+      printf("H2D\n");
+
+    break; // DVT
+
+    case MXF:
+      printf("\n");
+
+    break; // MXF
+
+    default:
+      printf("Invalid Method\n");
+      return 1;
+  }
   
 
 
@@ -187,7 +274,7 @@ int main()
 
   // 
   free(dev_mx);
-  free(hst_mx);
+  // free(hst_mx);
   free(d_org);
   free(d_dst);
 
