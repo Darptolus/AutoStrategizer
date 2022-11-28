@@ -231,37 +231,40 @@ int main()
     switch(cpu){
       case 0:
         if (v_flag) printf("MemCpy Dev_0: CPU core %.2u NUMA node %u Thread %d\n", cpu, node, omp_get_thread_num());
-        omp_target_memcpy(
-        x_ptr[0],                                 // dst
-        x_arr_0,                                  // src
-        size_c,                                   // length 
-        0,                                        // dst_offset
-        0,                                        // src_offset, 
-        0,                                        // dst_device_num
-        omp_get_initial_device()                  // src_device_num
-      );
+          omp_target_memcpy
+          (
+            x_ptr[0],                                 // dst
+            x_arr_0,                                  // src
+            size_c,                                   // length 
+            0,                                        // dst_offset
+            0,                                        // src_offset, 
+            0,                                        // dst_device_num
+            omp_get_initial_device()                  // src_device_num
+          );
       break;
       case 22:
         dest_id = 2;
         if (v_flag) printf("MemCpy Dev_1: CPU core %.2u NUMA node %u Thread %d\n", cpu, node, omp_get_thread_num());
-        omp_target_memcpy(
-              x_ptr[2],                     // dst
-              x_arr_1,                            // src
-              size_c,                             // length 
-              0,                                  // dst_offset
-              0,                                  // src_offset, 
-              2,                            // dst_device_num
-              omp_get_initial_device()            // src_device_num
-            );
-        omp_target_memcpy(
-              x_ptr[0],                           // dst
-              x_ptr[2],                     // src
-              size_c,                             // length 
-              size_c,                             // dst_offset
-              0,                                  // src_offset, 
-              0,                                  // dst_device_num
-              2                             // src_device_num
-            );
+          omp_target_memcpy
+          (
+            x_ptr[2],                     // dst
+            x_arr_1,                            // src
+            size_c,                             // length 
+            0,                                  // dst_offset
+            0,                                  // src_offset, 
+            2,                            // dst_device_num
+            omp_get_initial_device()            // src_device_num
+          );
+          omp_target_memcpy
+          (
+            x_ptr[0],                           // dst
+            x_ptr[2],                     // src
+            size_c,                             // length 
+            size_c,                             // dst_offset
+            0,                                  // src_offset, 
+            0,                                  // dst_device_num
+            2                             // src_device_num
+          );
       break;
       // default:
       //   if (v_flag) printf("Default: CPU core %.2u NUMA node %u Thread %d\n", cpu, node, omp_get_thread_num());
