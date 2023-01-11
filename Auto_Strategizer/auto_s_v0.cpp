@@ -13,49 +13,26 @@ struct numa_dom
   int conf = 0;
 } *numa_d, numa_t;
 
+// Communications dependences
 class cops_dep
 {
   private:
+    cops_dep * p_dep;
   public:
-    cops_dep(int a_deps, int a_done):
-      deps(a_deps), done(a_done){};
+    cops_dep(int a_deps, int a_done, int a_orig, int a_dest, int a_size, int a_offs):
+    deps(a_deps), done(a_done), orig(a_orig), dest(a_dest), size(a_size), offs(a_offs){};
+    cops_dep(int a_deps, int a_done, int a_orig, int a_dest, int a_size, int a_offs, int a_ipth):
+    deps(a_deps), done(a_done), orig(a_orig), dest(a_dest), size(a_size), offs(a_offs), ipth(a_ipth){};
     ~cops_dep(){};
+    // Todo: Add set/get methods
+    int deps;
     int done;
-    int deps; // Number of dependencies
-    // virtual int run() = 0; // Pure virtual
-} *op_deps;
-
-// Mem alloc deps
-class cops_mem: public cops_dep
-{
-  private:
-    cops_dep * p_dep;
-  public:
-    cops_mem(int a_deps, int a_done, int a_dev_id, int a_size):
-    cops_dep(a_deps, a_done),
-    dev_id(a_dev_id), size(a_size){};
-    ~cops_mem(){};
-    // Todo: Add set/get methods
-    int dev_id;
-    int size;
-};
-
-// Communications
-class cops_com: public cops_dep
-{
-  private:
-    cops_dep * p_dep;
-  public:
-    cops_com(int a_deps, int a_done, int a_orig, int a_dest, int a_size, int a_offs):
-    cops_dep(a_deps, a_done),
-    orig(a_orig), dest(a_dest), size(a_size), offs(a_offs){};
-    ~cops_com(){};
-    // Todo: Add set/get methods
     int orig;
     int dest;
     int size;
     int offs;
-};
+    int ipth;
+} *op_deps;
 
 // All deps
 typedef std::vector<cops_dep*> ve_deps;
@@ -105,11 +82,11 @@ void print_mx(int ***dev_mx_p, int n_dev_v, int n_hst_v);
 void print_numa(numa_dom *numa_d, int n_nma);
 int get_ops(ifstream *ops_f, ve_ops *all_ops, int n_hst, int n_dev);
 void print_ops(ve_ops *all_ops);
-void ops_deps(ve_ops *all_ops, ve_deps *all_deps, int ***dev_mx_cpy_p);
+void ops_deps(ve_ops *all_ops, ve_deps *all_deps, int ***dev_mx_cpy_p, int n_hst, int n_dev);
 
 int main()
 {
-  int n_dev = 0, n_net = 0, dev_a = 0, dev_b = 0, dev_i, n_nodes = 1, n_hst = 2, n_nma = 2, arr_len;
+  int n_dev = 0, n_net = 0, dev_a = 0, dev_b = 0, dev_i, dev_ii, n_nodes = 1, n_hst = 2, n_nma = 2, arr_len;
   int n_org, n_dst, f_sts;
   int **hst_mx, **dev_mx, **hst_mx_cpy, **dev_mx_cpy; 
 
@@ -146,7 +123,7 @@ int main()
 
   print_ops(&all_ops);
 
-  ops_deps(&all_ops, &all_deps, &dev_mx_cpy);
+  ops_deps(&all_ops, &all_deps, &dev_mx_cpy, n_hst, n_dev);
 
   // ******************** //
 
@@ -156,7 +133,7 @@ int main()
   for (auto& a_dep : all_deps)
   {
     // Print the values
-    cops_com * c_dep = static_cast <cops_com *> (a_dep);
+    cops_dep * c_dep = static_cast <cops_dep *> (a_dep);
     printf("Orig: %d Dest: %d Size: %d Offs: %d\n", c_dep->orig, c_dep->dest, c_dep->size, c_dep->offs);
     // cout << it->orig << ' ';
   }
@@ -371,7 +348,7 @@ int get_ops(ifstream *ops_f, ve_ops *all_ops, int n_hst, int n_dev)
             if (word.compare(0,1,"H") == 0)
             {
               // Host
-              cout << "[TMP:] "<< word << " " << endl;
+              cout << "[TMP:] "<< word << " " << endl; //ToBeDeleted
               word.erase(0,1);
               stringstream(word) >> d_id;
               a_ops->add_orig(d_id);
@@ -379,7 +356,7 @@ int get_ops(ifstream *ops_f, ve_ops *all_ops, int n_hst, int n_dev)
             else if (word.compare(0,1,"D") == 0)
             {
               // Device
-              cout << "[TMP:] "<< word << " " << endl;
+              cout << "[TMP:] "<< word << " " << endl; //ToBeDeleted
               word.erase(0,1);
               stringstream(word) >> d_id;
               a_ops->add_orig(d_id + n_hst); // Add No. Hosts
@@ -387,13 +364,13 @@ int get_ops(ifstream *ops_f, ve_ops *all_ops, int n_hst, int n_dev)
             else if (word.compare(0,2,"AH") == 0)
             {
               // All Devices
-              cout << "[TMP:] "<< word << " " << endl;
+              cout << "[TMP:] "<< word << " " << endl; //ToBeDeleted
               for(i_dev = 0; i_dev<n_hst; ++i_dev) a_ops->add_orig(i_dev); // Add No. Hosts
             }
             else if (word.compare(0,2,"AD") == 0)
             {
               // All Devices
-              cout << "[TMP:] "<< word << " " << endl;
+              cout << "[TMP:] "<< word << " " << endl; //ToBeDeleted
               for(i_dev = 0; i_dev<n_dev; ++i_dev) a_ops->add_orig(i_dev + n_hst); // Add No. Hosts
             }
             iss_a >> word;
@@ -403,31 +380,31 @@ int get_ops(ifstream *ops_f, ve_ops *all_ops, int n_hst, int n_dev)
             if (word.compare(0,3,"D2D") == 0)
             {
               a_ops->set_coop(D2D);
-              cout << "[TMP:] "<< word << " " << endl;
+              cout << "[TMP:] "<< word << " " << endl; //ToBeDeleted
               op_set = 1;
             }
             else if (word.compare(0,3,"BRC") == 0)
             {
               a_ops->set_coop(BRC);
-              cout << "[TMP:] "<< word << " " << endl;
+              cout << "[TMP:] "<< word << " " << endl; //ToBeDeleted
               op_set = 1;
             }
             else if (word.compare(0,3,"SCT") == 0)
             {
               a_ops->set_coop(SCT);
-              cout << "[TMP:] "<< word << " " << endl;
+              cout << "[TMP:] "<< word << " " << endl; //ToBeDeleted
               op_set = 1;
             }
             else if (word.compare(0,3,"GAT") == 0)
             {
               a_ops->set_coop(GAT);
-              cout << "[TMP:] "<< word << " " << endl;
+              cout << "[TMP:] "<< word << " " << endl; //ToBeDeleted
               op_set = 1;
             }
             else if (word.compare(0,3,"RED") == 0)
             {
               a_ops->set_coop(RED);
-              cout << "[TMP:] "<< word << " " << endl;
+              cout << "[TMP:] "<< word << " " << endl; //ToBeDeleted
               op_set = 1;
             }
             else
@@ -441,14 +418,14 @@ int get_ops(ifstream *ops_f, ve_ops *all_ops, int n_hst, int n_dev)
           {
             if (word.compare(0,1,"H") == 0)
             {
-              cout << "[TMP:] "<< word << " " << endl;
+              cout << "[TMP:] "<< word << " " << endl; //ToBeDeleted
               word.erase(0,1);
               stringstream(word) >> d_id;
               a_ops->add_dest(d_id);
             }
             else if (word.compare(0,1,"D") == 0 && op_set == 1)
             {
-              cout << "[TMP:] "<< word << " " << endl;
+              cout << "[TMP:] "<< word << " " << endl; //ToBeDeleted
               word.erase(0,1);
               stringstream(word) >> d_id;
               a_ops->add_dest(d_id + n_hst); // Add No. Hosts
@@ -456,13 +433,13 @@ int get_ops(ifstream *ops_f, ve_ops *all_ops, int n_hst, int n_dev)
             else if (word.compare(0,2,"AH") == 0)
             {
               // All Devices
-              cout << "[TMP:] "<< word << " " << endl;
+              cout << "[TMP:] "<< word << " " << endl; //ToBeDeleted
               for(i_dev = 0; i_dev<n_hst; ++i_dev) a_ops->add_dest(i_dev); // Add No. Hosts
             }
             else if (word.compare(0,2,"AD") == 0)
             {
               // All Devices
-              cout << "[TMP:] "<< word << " " << endl;
+              cout << "[TMP:] "<< word << " " << endl; //ToBeDeleted
               for(i_dev = 0; i_dev<n_dev; ++i_dev) a_ops->add_dest(i_dev + n_hst); // Add No. Hosts
             }
             iss_a >> word;
@@ -472,17 +449,17 @@ int get_ops(ifstream *ops_f, ve_ops *all_ops, int n_hst, int n_dev)
             if (word.compare(0,3,"H2D") == 0)
             {
               a_ops->set_mhtd(H2D);
-              cout << "[TMP:] "<< word << " " << endl;
+              cout << "[TMP:] "<< word << " " << endl; //ToBeDeleted
             }
             else if (word.compare(0,3,"DVT") == 0)
             {
               a_ops->set_mhtd(DVT);
-              cout << "[TMP:] "<< word << " " << endl;
+              cout << "[TMP:] "<< word << " " << endl; //ToBeDeleted
             }
             else if (word.compare(0,3,"MXF") == 0)
             {
               a_ops->set_mhtd(MXF);
-              cout << "[TMP:] "<< word << " " << endl;
+              cout << "[TMP:] "<< word << " " << endl; //ToBeDeleted
             }
             else
             {
@@ -565,46 +542,46 @@ void print_ops(ve_ops *all_ops)
   } 
 }
 
-void ops_deps(ve_ops *all_ops, ve_deps *all_deps, int ***dev_mx_cpy_p)
+void ops_deps(ve_ops *all_ops, ve_deps *all_deps, int ***dev_mx_cpy_p,int n_hst, int n_dev)
 {
-  int dev_a = 0, dev_b =0, h_aff, i_paths, p_done, max_bw, n_paths = 99;
+  int dev_a = 0, dev_b =0, dev_i, dev_ii, h_aff, i_paths, p_done, max_bw, lnk_bw, n_paths = 99;
   for (auto& t_op : *all_ops)
   {
     switch (t_op->get_coop())
     {
       case D2D:
-        printf("Setting D2D \n");
+        printf("Setting D2D \n"); //ToBeDeleted
         // Unidirectional one-to-one transfer between devices
         // ToDo: Validate size orig/dest
         switch (t_op->get_mhtd())
         {
           case H2D:
-          printf("Using H2D\n");
+          printf("Using H2D\n"); //ToBeDeleted
           dev_a = *(t_op->get_orig())->begin();
           dev_b = *(t_op->get_dest())->begin();
           // Check direct path D2D
           if ((*dev_mx_cpy_p)[dev_a][dev_b]>0) 
           {
             // ToDo: Remove available link?
-            printf("Valid H/D Orig: %d Dest: %d Value: %d\n", dev_a, dev_b, (*dev_mx_cpy_p)[dev_a][dev_b]);
-            op_deps = new cops_com(0, 0, dev_a, dev_b, t_op->get_size(), 0);
+            printf("Valid H/D Orig: %d Dest: %d Value: %d\n", dev_a, dev_b, (*dev_mx_cpy_p)[dev_a][dev_b]); //ToBeDeleted
+            op_deps = new cops_dep(0, 0, dev_a, dev_b, t_op->get_size(), 0);
             all_deps->push_back(op_deps);
           }
           else
           {
-            printf("Invalid H/D combination\n");
+            printf("Invalid H/D combination\n"); //ToBeDeleted
           }
           // return 0;
           break; // H2D
 
           // Distant Vector
           case DVT:
-          printf("Using DVT\n");
+          printf("Using DVT\n"); //ToBeDeleted
           break; // DVT
 
           // Max-Flow
           case MXF:
-          printf("Using MXF\n");
+          printf("Using MXF\n"); //ToBeDeleted
           // ******************** HERE ******************** //
           // Find multiple routes that increase throughput
 
@@ -612,23 +589,75 @@ void ops_deps(ve_ops *all_ops, ve_deps *all_deps, int ***dev_mx_cpy_p)
           dev_b = *(t_op->get_dest())->begin();
 
           i_paths = 0;
+          n_paths = 3;
           p_done = 0;
-          max_bw = 0;
 
           // ToDo: check numa affinty 
 
-          // i_paths<n_paths ||  
+          // i_paths<n_paths || 
 
-          // while(!p_done){
-          //   // Find connecting paths
-          //   for (dev_b = ; dev_b < n_dev_v + (*dev_mx_cpy_p)[dev_a][dev_b]; ++dev_b)
-          //   {
-          //     if ((*dev_mx_cpy_p)[dev_a][dev_b] > max_bw) 
-          //     {
-          //       max_bw = (*dev_mx_cpy_p)[dev_a][dev_b];
-          //     }
-          //   }
-          // }
+          if ((*dev_mx_cpy_p)[dev_a][dev_b]>0) 
+          {
+            // ToDo: Remove available link?
+            printf("Valid H/D Orig: %d Dest: %d Value: %d\n", dev_a, dev_b, (*dev_mx_cpy_p)[dev_a][dev_b]); //ToBeDeleted
+            op_deps = new cops_dep(0, 0, dev_a, dev_b, 0, 0, i_paths);
+            all_deps->push_back(op_deps);
+            i_paths++;
+          } 
+
+          while(!p_done){
+            // Find connecting paths
+            max_bw = 0;
+            for (dev_i = n_hst; dev_i < n_dev+n_hst; ++dev_i)
+            {
+              // ToDo: Check links more than 2 hops?
+              lnk_bw = (*dev_mx_cpy_p)[dev_a][dev_i] + (*dev_mx_cpy_p)[dev_i][dev_b];
+              if (dev_i != dev_b && (*dev_mx_cpy_p)[dev_i][dev_b] > max_bw) 
+              {
+                max_bw = (*dev_mx_cpy_p)[dev_i][dev_b];
+                dev_ii = dev_i;
+              }
+              // printf("Testing H/D Orig: %d Dest: %d Value: %d\n", dev_i, dev_b, (*dev_mx_cpy_p)[dev_i][dev_b]); //ToBeDeleted
+            }
+
+            if (max_bw > 0) 
+            {
+              printf("Valid H/D Orig: %d Dest: %d Value: %d\n", dev_ii, dev_b, (*dev_mx_cpy_p)[dev_ii][dev_b]);
+              // Generate dependencies
+              op_deps = new cops_dep(0, 0, dev_a, dev_ii, 0, i_paths, i_paths);
+              all_deps->push_back(op_deps);
+              op_deps = new cops_dep(0, 0, dev_ii, dev_b, 0, 0, i_paths);
+              all_deps->push_back(op_deps);
+              (*dev_mx_cpy_p)[dev_a][dev_ii] = 0;
+              (*dev_mx_cpy_p)[dev_ii][dev_b] = 0;
+              i_paths++;
+              printf("i_paths: %d\n", i_paths);
+            }
+            else
+            {
+              p_done = 1;
+              printf("i_paths: %d\n", i_paths);
+            }
+            
+            if(i_paths>=n_paths){
+              p_done = 1;
+            }
+          }
+
+          // Calculate sizes / offsets
+          // Evenly 
+          dev_i = 1;
+          for (auto& a_dep : *all_deps)
+          {
+            cops_dep * c_dep = static_cast <cops_dep *> (a_dep);
+            c_dep->size = t_op->get_size()/i_paths;
+            c_dep->offs = c_dep->offs*c_dep->size;
+            // printf("Orig: %d Dest: %d Size: %d Offs: %d\n", c_dep->orig, c_dep->dest, c_dep->size, c_dep->offs);
+            dev_i++;
+          }
+          
+          // Size based on bandwidth
+
 
           break; // MXF
 
@@ -658,9 +687,10 @@ void ops_deps(ve_ops *all_ops, ve_deps *all_deps, int ***dev_mx_cpy_p)
                 {
                   // ToDo: Remove available link?
                   printf("Valid H/D Orig: %d Dest: %d Value: %d\n", h_aff, dev_b, (*dev_mx_cpy_p)[h_aff][dev_b]);
-                  op_deps = new cops_com(0, 0, h_aff, dev_b, t_op->get_size(), 0);
+                  op_deps = new cops_dep(0, 0, h_aff, dev_b, t_op->get_size(), 0);
                   all_deps->push_back(op_deps);
                 }
+                // ToDo: check for multi-link connection
                 else
                 {
                   printf("Invalid H/D combination\n");
@@ -677,8 +707,9 @@ void ops_deps(ve_ops *all_ops, ve_deps *all_deps, int ***dev_mx_cpy_p)
               {
                 // ToDo: Remove available link?
                 printf("Valid H/D Orig: %d Dest: %d Value: %d\n", dev_a, dev_b, (*dev_mx_cpy_p)[dev_a][dev_b]);
-                op_deps = new cops_com(0, 0, dev_a, dev_b, t_op->get_size(), 0);
+                op_deps = new cops_dep(0, 0, dev_a, dev_b, t_op->get_size(), 0);
                 all_deps->push_back(op_deps);
+
               }
               else
               {
@@ -899,7 +930,7 @@ void ops_deps(ve_ops *all_ops, ve_deps *all_deps, int ***dev_mx_cpy_p)
 //       //Remove available link
 //       printf("Valid H/D combination\n");
 //       printf("Value %d\n", dev_mx_cpy[d_org[dev_a]][d_dst[dev_b]]);
-//       op_deps = new cops_com(d_org[dev_a], d_dst[dev_b], arr_len, 0);
+//       op_deps = new cops_dep(d_org[dev_a], d_dst[dev_b], arr_len, 0);
 //       all_deps.push_back(op_deps);
 //     }
 //     else
