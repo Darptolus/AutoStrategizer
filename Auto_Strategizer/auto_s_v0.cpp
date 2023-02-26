@@ -134,7 +134,7 @@ int main()
   {
     // Print the values
     cops_dep * c_dep = static_cast <cops_dep *> (a_dep);
-    printf("Orig: %d Dest: %d Size: %d Offs: %d\n", c_dep->orig, c_dep->dest, c_dep->size, c_dep->offs);
+    printf("Orig: %d Dest: %d Size: %d Offs: %d, Path No.: %d\n", c_dep->orig, c_dep->dest, c_dep->size, c_dep->offs, c_dep->ipth);
     // cout << it->orig << ' ';
   }
 
@@ -544,9 +544,9 @@ void print_ops(ve_ops *all_ops)
 
 void ops_deps(ve_ops *all_ops, ve_deps *all_deps, int ***dev_mx_cpy_p,int n_hst, int n_dev)
 {
-  int m_paths = 3, m_hops = 5; // inputs
-  int dev_a = 0, dev_b = 0, dev_i, dev_ii, i_hops, n_hops, i_paths, p_done, max_bw, min_lat, lnk_bw, i_link, n_link, h_aff;
-  
+  int m_paths = 4, m_hops = 5; // inputs
+  int dev_a = 0, dev_b = 0, dev_i, dev_ii, i_hops, n_hops, i_paths, p_done, max_bw, lnk_bw, i_link, n_link, h_aff;
+  float min_lat;
   // typedef std::vector<int> a_path;
 
   class op_path
@@ -554,21 +554,28 @@ void ops_deps(ve_ops *all_ops, ve_deps *all_deps, int ***dev_mx_cpy_p,int n_hst,
     public:
       op_path(int a_n_id, float a_p_bwth, int a_n_hops): n_id(a_n_id), n_hops(a_n_hops){
         p_op_path = NULL;
-        p_lat = 1/a_p_bwth;
+        // p_lat = 1/a_p_bwth;
+        p_lat = 0;
         // printf("Link lat : %f \n", p_lat);
       };
-      op_path(int a_n_id, int a_p_bwth, int a_n_hops, op_path * a_op_path): n_id(a_n_id), n_hops(a_n_hops), p_op_path(a_op_path){
+      op_path(int a_n_id, float a_p_bwth, int a_n_hops, op_path * a_op_path): n_id(a_n_id), n_hops(a_n_hops), p_op_path(a_op_path){
         p_lat = p_op_path->p_lat + 1/a_p_bwth;
+        o_id = p_op_path->n_id;
       };
       ~op_path(){};
       // ToDo: define set and get methods
       op_path * p_op_path;
       int n_id;
+      int o_id;
       float p_lat; // path latency
       int n_hops;
+      // int get_orig_id(){return o_id;};
+        // variable = (condition) ? expressionTrue : expressionFalse;
   } * iop_path;
 
   typedef std::vector<op_path*> op_paths;
+  op_paths::iterator it_path;
+  ve_deps::iterator i_cop;
 
   op_paths v_paths, vi_paths; // vector of paths
 
@@ -717,9 +724,10 @@ void ops_deps(ve_ops *all_ops, ve_deps *all_deps, int ***dev_mx_cpy_p,int n_hst,
             if ((*dev_mx_cpy_p)[dev_a][dev_b]>0) 
             {
               // ToDo: Remove available link?
-              printf("Valid H/D Orig: %d Dest: %d Value: %d\n", dev_a, dev_b, (*dev_mx_cpy_p)[dev_a][dev_b]); //ToBeDeleted
-              op_deps = new cops_dep(0, 0, dev_a, dev_b, 0, 0, i_paths);
-              all_deps->push_back(op_deps);
+              printf("Valid P2P Orig: %d Dest: %d Value: %d\n", dev_a, dev_b, (*dev_mx_cpy_p)[dev_a][dev_b]); //ToBeDeleted
+              // op_deps = new cops_dep(0, 0, dev_a, dev_b, 0, 0, i_paths);
+              // all_deps->push_back(op_deps);
+              all_deps->push_back(new cops_dep(0, 0, dev_a, dev_b, 0, 0, i_paths));
               i_paths++;
               // Remove link
               (*dev_mx_cpy_p)[dev_a][dev_b] = 0;
@@ -731,8 +739,13 @@ void ops_deps(ve_ops *all_ops, ve_deps *all_deps, int ***dev_mx_cpy_p,int n_hst,
               dev_ii = dev_b;
               i_link = 0;
               n_link = 0;
-              i_hops = 1;
+              i_hops = 0;
               p_done = 0;
+
+              printf("Creating dest %d \n", dev_ii);
+              v_paths.push_back(new op_path(dev_ii, 0, i_hops));
+              i_hops = 1;
+              i_link = 1;
 
               while (!p_done)
               {
@@ -744,18 +757,9 @@ void ops_deps(ve_ops *all_ops, ve_deps *all_deps, int ***dev_mx_cpy_p,int n_hst,
                   if (dev_i != dev_ii && (*dev_mx_cpy_p)[dev_i][dev_ii] > 0) 
                   {
                     // Add link to list
-                    if (i_hops == 1)
-                    {
-                      // printf("Creating I Link %d to %d \n", dev_i, dev_ii);
-                      iop_path = new op_path(dev_i, static_cast< float >((*dev_mx_cpy_p)[dev_i][dev_ii]), i_hops);
-                    }
-                    else
-                    {
-                      // printf("Creating II Link %d to %d \n", dev_i, dev_ii);
-                      iop_path = new op_path(dev_i, static_cast< float >((*dev_mx_cpy_p)[dev_i][dev_ii]), i_hops, v_paths.at(i_link-1));
-                    }
+                    printf("Creating II Link %d to %d bw: %d, parent %d\n", dev_i, dev_ii, (*dev_mx_cpy_p)[dev_i][dev_ii], (v_paths.at(i_link-1))->n_id);
+                    iop_path = new op_path(dev_i, static_cast< float >((*dev_mx_cpy_p)[dev_i][dev_ii]), i_hops, v_paths.at(i_link-1));
                     v_paths.push_back(iop_path);
-                    // printf("Link %d to %d bw: %d \n", dev_i, dev_ii, (*dev_mx_cpy_p)[dev_i][dev_ii]);
                     (*dev_mx_cpy_p)[dev_i][dev_ii] = 0;
                     (*dev_mx_cpy_p)[dev_ii][dev_i] = 0;
                     ++n_link;
@@ -779,7 +783,7 @@ void ops_deps(ve_ops *all_ops, ve_deps *all_deps, int ***dev_mx_cpy_p,int n_hst,
                 else if (i_hops >= m_hops)
                 {
                   p_done = 1;
-                  printf("Max Hops\n");
+                  printf(">>>>> Max Hops <<<<<\n");
                 }
                 else
                 {
@@ -797,26 +801,38 @@ void ops_deps(ve_ops *all_ops, ve_deps *all_deps, int ***dev_mx_cpy_p,int n_hst,
             {
               min_lat = 1000;
               // Evaluate all valid paths to find lowest latency 
-              for (auto& i_path : vi_paths)
+              for (auto i_path = vi_paths.begin(); i_path != vi_paths.end(); i_path++)
               {
-                if (min_lat > i_path->p_lat)
+                if (min_lat > (*i_path)->p_lat)
                 {
-                  printf("Path to %d latency: %f\n", iop_path->n_id, iop_path->p_lat);
-                  min_lat = i_path->p_lat;
-                  iop_path = i_path;
-                  // i_path = vi_paths.erase(i_path);
+                  printf("Path to %d latency: %f\n", (*i_path)->n_id, (*i_path)->p_lat);
+                  min_lat = (*i_path)->p_lat;
+                  it_path = i_path;
+                  iop_path = (*i_path);
                 }
               }
               if (min_lat != 1000)
               {
-                while (iop_path->p_op_path != NULL)
+                // i_cop = all_deps->end();
+                // First element is origin
+                // iop_path = iop_path->p_op_path;
+                
+                while(iop_path->n_id != dev_b)
                 {
-                  // Get all links of current path
-                  // all_deps->push_back(new cops_dep(0, 0, dev_a, dev_b, t_op->get_size(), 0));
-                  printf("[min] Path to %d latency: %f\n", iop_path->n_id, iop_path->p_lat);
+                  all_deps->push_back(new cops_dep(0, 0, iop_path->n_id, iop_path->o_id, 0, 0, i_paths));
+                  printf("[min] Path from %d to %d latency: %f\n", iop_path->n_id, iop_path->o_id, iop_path->p_lat);
                   iop_path = iop_path->p_op_path;
                 }
+                // while (iop_path != NULL)
+                // {
+                //   // Get all links of current path
+                //   // i_cop = all_deps->insert(i_cop, new cops_dep(0, 0, 99, iop_path->n_id, t_op->get_size(), 0, i_paths));
+                //   printf("[min] Path from %d to %d latency: %f\n", iop_path->o_id, iop_path->n_id, iop_path->p_lat);
+                //   iop_path = iop_path->p_op_path;
+                // }
+                
                 i_paths++;
+                vi_paths.erase(it_path--);
               }
               if(i_paths>=m_paths){
                 p_done = 1;
