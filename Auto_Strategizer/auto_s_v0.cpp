@@ -19,10 +19,10 @@ class cops_dep
   private:
     cops_dep * p_dep;
   public:
-    cops_dep(int a_deps, int a_done, int a_orig, int a_dest, int a_size, int a_offs):
-    deps(a_deps), done(a_done), orig(a_orig), dest(a_dest), size(a_size), offs(a_offs){};
-    cops_dep(int a_deps, int a_done, int a_orig, int a_dest, int a_size, int a_offs, int a_ipth):
-    deps(a_deps), done(a_done), orig(a_orig), dest(a_dest), size(a_size), offs(a_offs), ipth(a_ipth){};
+    // cops_dep(int a_deps, int a_done, int a_orig, int a_dest, int a_size, int a_oof, int a_dof):
+    // deps(a_deps), done(a_done), orig(a_orig), dest(a_dest), size(a_size), o_of(a_oof), d_of(a_dof){};
+    cops_dep(int a_deps, int a_done, int a_orig, int a_dest, int a_size, int a_oof, int a_dof, int a_ipth):
+    deps(a_deps), done(a_done), orig(a_orig), dest(a_dest), size(a_size), o_of(a_oof), d_of(a_dof), ipth(a_ipth){};
     ~cops_dep(){};
     // Todo: Add set/get methods
     int deps;
@@ -30,7 +30,8 @@ class cops_dep
     int orig;
     int dest;
     int size;
-    int offs;
+    int o_of;     // Origin Offset
+    int d_of;     // Destination Offset
     int ipth;
 } *op_deps; // Remove
 
@@ -83,6 +84,7 @@ void print_numa(numa_dom *numa_d, int n_nma);
 int get_ops(ifstream *ops_f, ve_ops *all_ops, int n_hst, int n_dev);
 void print_ops(ve_ops *all_ops);
 void ops_deps(ve_ops *all_ops, ve_deps *all_deps, int ***dev_mx_cpy_p, int n_hst, int n_dev);
+void print_cpat(ve_deps *all_deps);
 
 int main()
 {
@@ -128,15 +130,16 @@ int main()
   // ******************** //
 
   // Outputs
-  // Dependencies, Sprintf("Valid H/D combination\n");izes, Offsets
-  printf("Outputs\n");
-  for (auto& a_dep : all_deps)
-  {
-    // Print the values
-    cops_dep * c_dep = static_cast <cops_dep *> (a_dep);
-    printf("Orig: %d Dest: %d Size: %d Offs: %d, Path No.: %d\n", c_dep->orig, c_dep->dest, c_dep->size, c_dep->offs, c_dep->ipth);
-    // cout << it->orig << ' ';
-  }
+  print_cpat(&all_deps);
+  // Dependencies, Sizes, Offsets
+  // printf("Outputs\n");
+  // for (auto& a_dep : all_deps)
+  // {
+  //   // Print the values
+  //   cops_dep * c_dep = static_cast <cops_dep *> (a_dep);
+  //   printf("Orig: %d Dest: %d Size: %d O_Offs: %d D_Offs: %d, Path No.: %d\n", c_dep->orig, c_dep->dest, c_dep->size, c_dep->o_of, c_dep->d_of, c_dep->ipth);
+  //   // cout << it->orig << ' ';
+  // }
 
   // printf("\n");
 
@@ -601,7 +604,7 @@ void ops_deps(ve_ops *all_ops, ve_deps *all_deps, int ***dev_mx_cpy_p,int n_hst,
               {
                 // ToDo: Remove available link?
                 printf("Valid H/D Orig: %d Dest: %d Value: %d\n", dev_a, dev_b, (*dev_mx_cpy_p)[dev_a][dev_b]); //ToBeDeleted
-                all_deps->push_back(new cops_dep(0, 0, dev_a, dev_b, t_op->get_size(), 0));
+                all_deps->push_back(new cops_dep(0, 0, dev_a, dev_b, t_op->get_size(), 0, 0, 0));
               }
               else
               {
@@ -630,7 +633,7 @@ void ops_deps(ve_ops *all_ops, ve_deps *all_deps, int ***dev_mx_cpy_p,int n_hst,
             {
               // ToDo: Remove available link?
               printf("Valid H/D Orig: %d Dest: %d Value: %d\n", dev_a, dev_b, (*dev_mx_cpy_p)[dev_a][dev_b]); //ToBeDeleted
-              op_deps = new cops_dep(0, 0, dev_a, dev_b, 0, 0, i_paths);
+              op_deps = new cops_dep(0, 0, dev_a, dev_b, 0, 0, 0, i_paths);
               all_deps->push_back(op_deps);
               i_paths++;
               // Remove link
@@ -672,9 +675,9 @@ void ops_deps(ve_ops *all_ops, ve_deps *all_deps, int ***dev_mx_cpy_p,int n_hst,
                 {
                   printf("Valid H/D Orig: %d Dest: %d Value: %d\n", dev_ii, dev_b, (*dev_mx_cpy_p)[dev_ii][dev_b]);
                   // Generate dependencies
-                  op_deps = new cops_dep(0, 0, dev_a, dev_ii, 0, i_paths, i_paths);
+                  op_deps = new cops_dep(0, 0, dev_a, dev_ii, 0, i_paths, 0, i_paths);
                   all_deps->push_back(op_deps);
-                  op_deps = new cops_dep(0, 0, dev_ii, dev_b, 0, 0, i_paths);
+                  op_deps = new cops_dep(0, 0, dev_ii, dev_b, 0, 0, 0, i_paths);
                   all_deps->push_back(op_deps);
                   // Remove links
                   (*dev_mx_cpy_p)[dev_a][dev_ii] = 0;
@@ -695,9 +698,9 @@ void ops_deps(ve_ops *all_ops, ve_deps *all_deps, int ***dev_mx_cpy_p,int n_hst,
             dev_i = 1;
             for (auto& a_dep : *all_deps)
             {
-              cops_dep * c_dep = static_cast <cops_dep *> (a_dep);
-              c_dep->size = t_op->get_size()/i_paths;
-              c_dep->offs = c_dep->offs*c_dep->size;
+              a_dep->size = t_op->get_size()/i_paths;
+              a_dep->o_of = a_dep->o_of*a_dep->size;
+              a_dep->d_of = a_dep->d_of*a_dep->size;
               // printf("Orig: %d Dest: %d Size: %d Offs: %d\n", c_dep->orig, c_dep->dest, c_dep->size, c_dep->offs);
               dev_i++;
             }
@@ -727,7 +730,7 @@ void ops_deps(ve_ops *all_ops, ve_deps *all_deps, int ***dev_mx_cpy_p,int n_hst,
               printf("Valid P2P Orig: %d Dest: %d Value: %d\n", dev_a, dev_b, (*dev_mx_cpy_p)[dev_a][dev_b]); //ToBeDeleted
               // op_deps = new cops_dep(0, 0, dev_a, dev_b, 0, 0, i_paths);
               // all_deps->push_back(op_deps);
-              all_deps->push_back(new cops_dep(0, 0, dev_a, dev_b, 0, 0, i_paths));
+              all_deps->push_back(new cops_dep(0, 0, dev_a, dev_b, 0, 0, 0, i_paths));
               i_paths++;
               // Remove link
               (*dev_mx_cpy_p)[dev_a][dev_b] = 0;
@@ -794,8 +797,8 @@ void ops_deps(ve_ops *all_ops, ve_deps *all_deps, int ***dev_mx_cpy_p,int n_hst,
                 // Get other node with same numer of hops or increase 
               } 
             }
-
-            // ******************** HERE ******************** //
+            
+            // Find lowest latency path(s) among valid paths
             p_done = 0;
             while(!p_done)
             {
@@ -813,24 +816,14 @@ void ops_deps(ve_ops *all_ops, ve_deps *all_deps, int ***dev_mx_cpy_p,int n_hst,
               }
               if (min_lat != 1000)
               {
-                // i_cop = all_deps->end();
-                // First element is origin
-                // iop_path = iop_path->p_op_path;
-                
+                // Min latency path found
                 while(iop_path->n_id != dev_b)
                 {
-                  all_deps->push_back(new cops_dep(0, 0, iop_path->n_id, iop_path->o_id, 0, 0, i_paths));
+                  // Generate data movements based on path
+                  all_deps->push_back(new cops_dep(0, 0, iop_path->n_id, iop_path->o_id, 0, 0, 0, i_paths));
                   printf("[min] Path from %d to %d latency: %f\n", iop_path->n_id, iop_path->o_id, iop_path->p_lat);
                   iop_path = iop_path->p_op_path;
                 }
-                // while (iop_path != NULL)
-                // {
-                //   // Get all links of current path
-                //   // i_cop = all_deps->insert(i_cop, new cops_dep(0, 0, 99, iop_path->n_id, t_op->get_size(), 0, i_paths));
-                //   printf("[min] Path from %d to %d latency: %f\n", iop_path->o_id, iop_path->n_id, iop_path->p_lat);
-                //   iop_path = iop_path->p_op_path;
-                // }
-                
                 i_paths++;
                 vi_paths.erase(it_path--);
               }
@@ -838,55 +831,33 @@ void ops_deps(ve_ops *all_ops, ve_deps *all_deps, int ***dev_mx_cpy_p,int n_hst,
                 p_done = 1;
               }
             }
-            // {
-            //   cops_dep * c_dep = static_cast <cops_dep *> (a_dep);
-            //   c_dep->size = t_op->get_size()/i_paths;
-            //   c_dep->offs = c_dep->offs*c_dep->size;
-            //   // printf("Orig: %d Dest: %d Size: %d Offs: %d\n", c_dep->orig, c_dep->dest, c_dep->size, c_dep->offs);
-            //   dev_i++;
-            // }
-            // Get connecting paths
-            //   if(i_paths>=m_paths){
-            //     p_done = 1;
-            //   }
-            //   else
-            //   {
-              
-                // if (max_bw > 0) 
-                // {
-                //   printf("Valid H/D Orig: %d Dest: %d Value: %d\n", dev_ii, dev_b, (*dev_mx_cpy_p)[dev_ii][dev_b]);
-                //   // Generate dependencies
-                //   op_deps = new cops_dep(0, 0, dev_a, dev_ii, 0, i_paths, i_paths);
-                //   all_deps->push_back(op_deps);
-                //   op_deps = new cops_dep(0, 0, dev_ii, dev_b, 0, 0, i_paths);
-                //   all_deps->push_back(op_deps);
-                //   // Remove links
-                //   (*dev_mx_cpy_p)[dev_a][dev_ii] = 0;
-                //   (*dev_mx_cpy_p)[dev_ii][dev_b] = 0;
-                //   i_paths++;
-                //   printf("i_paths: %d\n", i_paths);
-                // }
-                // else
-                // {
-                //   p_done = 1;
-                //   printf("i_paths: %d\n", i_paths);
-                // }
-            //   }
-            // }
 
+            // ******************** HERE ******************** //
             // Calculate sizes / offsets
             // Evenly 
-            // dev_i = 1;
-            // for (auto& a_dep : *all_deps)
-            // {
-            //   cops_dep * c_dep = static_cast <cops_dep *> (a_dep);
-            //   c_dep->size = t_op->get_size()/i_paths;
-            //   c_dep->offs = c_dep->offs*c_dep->size;
-            //   // printf("Orig: %d Dest: %d Size: %d Offs: %d\n", c_dep->orig, c_dep->dest, c_dep->size, c_dep->offs);
-            //   dev_i++;
-            // }
+            for (auto& a_dep : *all_deps)
+            {
+              a_dep->size = t_op->get_size()/i_paths;
+              if (a_dep->orig == dev_a) // Origin
+              {
+                a_dep->o_of = a_dep->ipth*a_dep->size;
+                a_dep->d_of = 0; 
+              }
+              else if (a_dep->dest == dev_b) // Destination
+              {
+                a_dep->o_of = 0;
+                a_dep->d_of = a_dep->ipth*a_dep->size; 
+              }
+              else // Intermediate 
+              {
+                a_dep->o_of = 0;
+                a_dep->d_of = 0; 
+              }
+              // printf("Orig: %d Dest: %d Size: %d Offs: %d\n", c_dep->orig, c_dep->dest, c_dep->size, c_dep->offs);
+              dev_i++;
+            }
             
-            // Size based on bandwidth
+            // ToDo: Size based on bandwidth
             // ******************** HERE ******************** //
 
           break; // MXF
@@ -917,7 +888,7 @@ void ops_deps(ve_ops *all_ops, ve_deps *all_deps, int ***dev_mx_cpy_p,int n_hst,
                 {
                   // ToDo: Remove available link?
                   printf("Valid H/D Orig: %d Dest: %d Value: %d\n", h_aff, dev_b, (*dev_mx_cpy_p)[h_aff][dev_b]);
-                  op_deps = new cops_dep(0, 0, h_aff, dev_b, t_op->get_size(), 0);
+                  op_deps = new cops_dep(0, 0, h_aff, dev_b, t_op->get_size(), 0, 0, 0);
                   all_deps->push_back(op_deps);
                 }
                 // ToDo: check for multi-link connection
@@ -937,7 +908,7 @@ void ops_deps(ve_ops *all_ops, ve_deps *all_deps, int ***dev_mx_cpy_p,int n_hst,
               {
                 // ToDo: Remove available link?
                 printf("Valid H/D Orig: %d Dest: %d Value: %d\n", dev_a, dev_b, (*dev_mx_cpy_p)[dev_a][dev_b]);
-                op_deps = new cops_dep(0, 0, dev_a, dev_b, t_op->get_size(), 0);
+                op_deps = new cops_dep(0, 0, dev_a, dev_b, t_op->get_size(), 0, 0, 0);
                 all_deps->push_back(op_deps);
 
               }
@@ -1045,10 +1016,18 @@ void ops_deps(ve_ops *all_ops, ve_deps *all_deps, int ***dev_mx_cpy_p,int n_hst,
   } // End for (all_ops)
 }
 
-
+void print_cpat(ve_deps *all_deps)
+{
+  printf("Communication Pattern\n");
+  for (auto& a_dep : *all_deps)
+  {
+    // Print the values
+    printf("Orig: %d Dest: %d Size: %d O_Offs: %d D_Offs: %d, Path No.: %d\n", a_dep->orig, a_dep->dest, a_dep->size, a_dep->o_of, a_dep->d_of, a_dep->ipth);
+    // cout << it->orig << ' ';
+  }
+}
 
   // Memory allocation
-  // dest_no = 2;
   // // Allocate memory
   // cnk_len = arr_len/dest_no;
   // size_c = sizeof(int) * cnk_len;
