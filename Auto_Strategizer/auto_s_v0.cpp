@@ -3,9 +3,14 @@
 #include <string>
 #include<bits/stdc++.h>
 #include <vector>
+#include <numa.h>
+#include <omp.h>
+
 // #include <sstream>
 
 using namespace std;
+
+const bool v_flag = false; // Print verifications True=On False=Off
 
 struct numa_dom
 {
@@ -29,6 +34,8 @@ class cops_dep
     int done;
     int orig;
     int dest;
+    int o_id;
+    int d_id;
     int size;
     int o_of;     // Origin Offset
     int d_of;     // Destination Offset
@@ -41,7 +48,7 @@ typedef std::vector<cops_dep*> ve_deps;
 ve_deps all_deps;
 
 enum c_ops { D2D, BRC, SCT, GAT, RED };
-enum h_mth { H2D, DVT, MXF }; // Host-to-Device, Distant Vector, Max-Flow
+enum h_mth { P2P, DVT, MXF }; // Host-to-Device, Distant Vector, Max-Flow
 
 class cops_def
 {
@@ -77,20 +84,37 @@ typedef std::vector<cops_def*> ve_ops;
 
 ve_ops all_ops;
 
+struct mem_info
+{
+  int node_id;
+  int size;
+};
+
+typedef std::vector<mem_info*> ve_meminfo;
+
+ve_meminfo all_meminfo;
+
 int get_topo(ifstream *arch_f, int n_hst_v, int ***dev_mx_p, int *n_dev, int *n_net);
 void copy_mx(int ***dev_mx_p, int ***dev_mx_cpy_p, int n_dev_v, int n_hst_v, int new_cpy);
 void print_mx(int ***dev_mx_p, int n_dev_v, int n_hst_v);
 void print_numa(numa_dom *numa_d, int n_nma);
 int get_ops(ifstream *ops_f, ve_ops *all_ops, int n_hst, int n_dev);
 void print_ops(ve_ops *all_ops);
-void ops_deps(ve_ops *all_ops, ve_deps *all_deps, int ***dev_mx_cpy_p, int n_hst, int n_dev);
+void ops_deps(ve_ops *all_ops, ve_deps *all_deps, int ***dev_mx_cpy_p, int n_hst, int n_dev, ve_meminfo *all_meminfo);
 void print_cpat(ve_deps *all_deps);
+void auto_malloc(ve_meminfo *all_meminfo, void ** mem_ptr, int n_hst, int n_dev);
+// void exec_op(ve_deps *all_deps, void *** mem_ptr);
+void auto_mfree(ve_meminfo *all_meminfo, void ** mem_ptr, int n_hst, int n_dev);
 
 int main()
 {
   int n_dev = 0, n_net = 0, dev_a = 0, dev_b = 0, dev_i, dev_ii, n_nodes = 1, n_hst = 2, n_nma = 2, arr_len;
   int n_org, n_dst, f_sts;
   int **hst_mx, **dev_mx, **hst_mx_cpy, **dev_mx_cpy; 
+  void ** mem_ptr;
+
+  double start, end;
+  // unsigned cpu, node;
 
   ifstream t_dgx ("topo_dgx");
   ifstream t_smx ("topo_smx");
@@ -125,30 +149,166 @@ int main()
 
   print_ops(&all_ops);
 
-  ops_deps(&all_ops, &all_deps, &dev_mx_cpy, n_hst, n_dev);
-
-  // ******************** //
+  ops_deps(&all_ops, &all_deps, &dev_mx_cpy, n_hst, n_dev, &all_meminfo);
 
   // Outputs
   print_cpat(&all_deps);
-  // Dependencies, Sizes, Offsets
-  // printf("Outputs\n");
-  // for (auto& a_dep : all_deps)
+
+//**************************************************//
+// Memory allocation
+//**************************************************//
+
+  mem_ptr = (void **) malloc(sizeof(void**) * (n_dev+n_hst));
+  // printf("mem_ptr: %p \n", &mem_ptr);
+  auto_malloc(&all_meminfo, mem_ptr, n_hst, n_dev);
+
+  // size_t chunk_s;
+  // int dev_id;
+  // // Memory allocation
+  // // printf("mem_ptr: %p \n", mem_ptr);
+  // printf("[MALLOC:] Memory  Allocation:\n");
+  // for (auto& a_mem : all_meminfo)
   // {
-  //   // Print the values
-  //   cops_dep * c_dep = static_cast <cops_dep *> (a_dep);
-  //   printf("Orig: %d Dest: %d Size: %d O_Offs: %d D_Offs: %d, Path No.: %d\n", c_dep->orig, c_dep->dest, c_dep->size, c_dep->o_of, c_dep->d_of, c_dep->ipth);
-  //   // cout << it->orig << ' ';
+  //   chunk_s = sizeof(int) * a_mem->size;
+  //   if (a_mem->node_id<n_hst)
+  //   {
+  //     printf("[MALLOC:] Dev: %d Size: %zu\n", a_mem->node_id, chunk_s);
+  //     // printf("mem_ptr: %p \n", mem_ptr[a_mem->node_id]);
+  //     mem_ptr[a_mem->node_id] = numa_alloc_onnode(chunk_s, a_mem->node_id);
+  //   }
+  //   else
+  //   {
+  //     dev_id = a_mem->node_id-n_hst;
+  //     printf("[MALLOC2:] Node: %d Dev: %d Size: %zu\n", a_mem->node_id, dev_id, chunk_s);
+  //     // printf("mem_ptr: %p \n", mem_ptr[a_mem->node_id]);
+  //     mem_ptr[a_mem->node_id] = omp_target_alloc(chunk_s, dev_id);
+      
+  //   } 
   // }
 
+//**************************************************//
+// Array initialization (copy to device(s) if necesary)
+//**************************************************//
+
+// if #origin_dev = 1
+// for (int i=0; i<arr_len; ++i)
+//     x_arr[i]=i+v_no;
+// else
+
+
+//**************************************************//
+// Execute
+//**************************************************//
+
+  // exec_op(&all_deps, &mem_ptr);
+
+printf("[EXEC:] Execution:\n");
+
+
+  for (auto& a_dep : all_deps)
+  {
+    // Print the values
+    printf("[EXEC:] Orig: %d Dest: %d Size: %d O_Offs: %d D_Offs: %d, Path No.: %d\n", a_dep->orig, a_dep->dest, a_dep->size, a_dep->o_of, a_dep->d_of, a_dep->ipth);
+  
+  
+  // #pragma omp parallel num_threads(num_thr) private(dest_id, cpu, node)
+  // {
+  //   #pragma omp single
+  //   {
+  //     start = omp_get_wtime();
+  //   }
+  //   syscall(SYS_getcpu, &cpu, &node, NULL);
+  //   switch(cpu){
+  //     case 0:
+  //       if (v_flag) printf("MemCpy Dev_0: CPU core %.2u NUMA node %u Thread %d\n", cpu, node, omp_get_thread_num());
+  //         omp_target_memcpy
+  //         (
+  //           x_ptr[0],                                 // dst
+  //           x_arr_0,                                  // src
+  //           size_c,                                   // length 
+  //           0,                                        // dst_offset
+  //           0,                                        // src_offset, 
+  //           0,                                        // dst_device_num
+  //           omp_get_initial_device()                  // src_device_num
+  //         );
+  //     break;
+  //     case 22:
+  //       dest_id = 2;
+  //       if (v_flag) printf("MemCpy Dev_1: CPU core %.2u NUMA node %u Thread %d\n", cpu, node, omp_get_thread_num());
+  //         omp_target_memcpy
+  //         (
+  //           x_ptr[2],                     // dst
+  //           x_arr_1,                            // src
+  //           size_c,                             // length 
+  //           0,                                  // dst_offset
+  //           0,                                  // src_offset, 
+  //           2,                            // dst_device_num
+  //           omp_get_initial_device()            // src_device_num
+  //         );
+  //         omp_target_memcpy
+  //         (
+  //           x_ptr[0],                           // dst
+  //           x_ptr[2],                     // src
+  //           size_c,                             // length 
+  //           size_c,                             // dst_offset
+  //           0,                                  // src_offset, 
+  //           0,                                  // dst_device_num
+  //           2                             // src_device_num
+  //         );
+  //     break;
+  //     // default:
+  //     //   if (v_flag) printf("Default: CPU core %.2u NUMA node %u Thread %d\n", cpu, node, omp_get_thread_num());
+  //   }
+  //   #pragma omp barrier
+  //   #pragma omp single
+  //   {
+  //     end = omp_get_wtime();
+  //   }
+  //   #pragma omp barrier
+  // }
+  
+  
+  }
+
+
+
+
+
+//**************************************************//
+// Memory Free
+//**************************************************//
+
   // printf("\n");
+  auto_mfree(&all_meminfo, mem_ptr, n_hst, n_dev);
+
+  // size_t chunk_s, dev_id;
+  // printf("[MFREE:] Memory Free:\n");
+  // for (auto& a_mem : all_meminfo)
+  // {
+  //   chunk_s = sizeof(int) * a_mem->size;
+  //   if (a_mem->node_id<n_hst)
+  //   {
+  //     printf("[MFREE:] Dev: %d Size: %d\n", a_mem->node_id, a_mem->size);
+  //     numa_free(mem_ptr[a_mem->node_id], chunk_s);
+  //   }
+  //   else
+  //   {
+  //     dev_id = a_mem->node_id-n_hst;
+  //     printf("[MFREE:] Dev: %d Size: %d\n", a_mem->node_id, a_mem->size);
+  //     omp_target_free(mem_ptr[a_mem->node_id], dev_id);
+  //   }
+  // }
 
 
-  // 
   free(dev_mx);
+  
   // free(hst_mx);
 
   for (auto& element : all_deps) {
+    delete element;
+  }
+
+  for (auto& element : all_meminfo) {
     delete element;
   }
 
@@ -351,7 +511,7 @@ int get_ops(ifstream *ops_f, ve_ops *all_ops, int n_hst, int n_dev)
             if (word.compare(0,1,"H") == 0)
             {
               // Host
-              cout << "[TMP:] "<< word << " " << endl; //ToBeDeleted
+              cout << "[IN:] "<< word << " " << endl; //ToBeDeleted
               word.erase(0,1);
               stringstream(word) >> d_id;
               a_ops->add_orig(d_id);
@@ -359,7 +519,7 @@ int get_ops(ifstream *ops_f, ve_ops *all_ops, int n_hst, int n_dev)
             else if (word.compare(0,1,"D") == 0)
             {
               // Device
-              cout << "[TMP:] "<< word << " " << endl; //ToBeDeleted
+              cout << "[IN:] "<< word << " " << endl; //ToBeDeleted
               word.erase(0,1);
               stringstream(word) >> d_id;
               a_ops->add_orig(d_id + n_hst); // Add No. Hosts
@@ -367,13 +527,13 @@ int get_ops(ifstream *ops_f, ve_ops *all_ops, int n_hst, int n_dev)
             else if (word.compare(0,2,"AH") == 0)
             {
               // All Devices
-              cout << "[TMP:] "<< word << " " << endl; //ToBeDeleted
+              cout << "[IN:] "<< word << " " << endl; //ToBeDeleted
               for(i_dev = 0; i_dev<n_hst; ++i_dev) a_ops->add_orig(i_dev); // Add No. Hosts
             }
             else if (word.compare(0,2,"AD") == 0)
             {
               // All Devices
-              cout << "[TMP:] "<< word << " " << endl; //ToBeDeleted
+              cout << "[IN:] "<< word << " " << endl; //ToBeDeleted
               for(i_dev = 0; i_dev<n_dev; ++i_dev) a_ops->add_orig(i_dev + n_hst); // Add No. Hosts
             }
             iss_a >> word;
@@ -383,31 +543,31 @@ int get_ops(ifstream *ops_f, ve_ops *all_ops, int n_hst, int n_dev)
             if (word.compare(0,3,"D2D") == 0)
             {
               a_ops->set_coop(D2D);
-              cout << "[TMP:] "<< word << " " << endl; //ToBeDeleted
+              cout << "[IN:] "<< word << " " << endl; //ToBeDeleted
               op_set = 1;
             }
             else if (word.compare(0,3,"BRC") == 0)
             {
               a_ops->set_coop(BRC);
-              cout << "[TMP:] "<< word << " " << endl; //ToBeDeleted
+              cout << "[IN:] "<< word << " " << endl; //ToBeDeleted
               op_set = 1;
             }
             else if (word.compare(0,3,"SCT") == 0)
             {
               a_ops->set_coop(SCT);
-              cout << "[TMP:] "<< word << " " << endl; //ToBeDeleted
+              cout << "[IN:] "<< word << " " << endl; //ToBeDeleted
               op_set = 1;
             }
             else if (word.compare(0,3,"GAT") == 0)
             {
               a_ops->set_coop(GAT);
-              cout << "[TMP:] "<< word << " " << endl; //ToBeDeleted
+              cout << "[IN:] "<< word << " " << endl; //ToBeDeleted
               op_set = 1;
             }
             else if (word.compare(0,3,"RED") == 0)
             {
               a_ops->set_coop(RED);
-              cout << "[TMP:] "<< word << " " << endl; //ToBeDeleted
+              cout << "[IN:] "<< word << " " << endl; //ToBeDeleted
               op_set = 1;
             }
             else
@@ -421,14 +581,14 @@ int get_ops(ifstream *ops_f, ve_ops *all_ops, int n_hst, int n_dev)
           {
             if (word.compare(0,1,"H") == 0)
             {
-              cout << "[TMP:] "<< word << " " << endl; //ToBeDeleted
+              cout << "[IN:] "<< word << " " << endl; //ToBeDeleted
               word.erase(0,1);
               stringstream(word) >> d_id;
               a_ops->add_dest(d_id);
             }
             else if (word.compare(0,1,"D") == 0 && op_set == 1)
             {
-              cout << "[TMP:] "<< word << " " << endl; //ToBeDeleted
+              cout << "[IN:] "<< word << " " << endl; //ToBeDeleted
               word.erase(0,1);
               stringstream(word) >> d_id;
               a_ops->add_dest(d_id + n_hst); // Add No. Hosts
@@ -436,33 +596,33 @@ int get_ops(ifstream *ops_f, ve_ops *all_ops, int n_hst, int n_dev)
             else if (word.compare(0,2,"AH") == 0)
             {
               // All Devices
-              cout << "[TMP:] "<< word << " " << endl; //ToBeDeleted
+              cout << "[IN:] "<< word << " " << endl; //ToBeDeleted
               for(i_dev = 0; i_dev<n_hst; ++i_dev) a_ops->add_dest(i_dev); // Add No. Hosts
             }
             else if (word.compare(0,2,"AD") == 0)
             {
               // All Devices
-              cout << "[TMP:] "<< word << " " << endl; //ToBeDeleted
+              cout << "[IN:] "<< word << " " << endl; //ToBeDeleted
               for(i_dev = 0; i_dev<n_dev; ++i_dev) a_ops->add_dest(i_dev + n_hst); // Add No. Hosts
             }
             iss_a >> word;
           }
           if (word.length() == 3 && op_set == 1)
           {
-            if (word.compare(0,3,"H2D") == 0)
+            if (word.compare(0,3,"P2P") == 0)
             {
-              a_ops->set_mhtd(H2D);
-              cout << "[TMP:] "<< word << " " << endl; //ToBeDeleted
+              a_ops->set_mhtd(P2P);
+              cout << "[IN:] "<< word << " " << endl; //ToBeDeleted
             }
             else if (word.compare(0,3,"DVT") == 0)
             {
               a_ops->set_mhtd(DVT);
-              cout << "[TMP:] "<< word << " " << endl; //ToBeDeleted
+              cout << "[IN:] "<< word << " " << endl; //ToBeDeleted
             }
             else if (word.compare(0,3,"MXF") == 0)
             {
               a_ops->set_mhtd(MXF);
-              cout << "[TMP:] "<< word << " " << endl; //ToBeDeleted
+              cout << "[IN:] "<< word << " " << endl; //ToBeDeleted
             }
             else
             {
@@ -475,7 +635,6 @@ int get_ops(ifstream *ops_f, ve_ops *all_ops, int n_hst, int n_dev)
           {
             printf("Invalid Input\n");
           }
-          
 
         }
         
@@ -508,32 +667,32 @@ int get_ops(ifstream *ops_f, ve_ops *all_ops, int n_hst, int n_dev)
 
 void print_ops(ve_ops *all_ops)
 {
-  printf("All Operations\n");
+  printf("[PRINT:] Operation(s):\n");
   for (auto& it : *all_ops)
   {
     // Print the values
-    printf("Type: ");
-    if (it->get_coop() == D2D) printf("D2D ");
-    else if (it->get_coop() == BRC) printf("BRC ");
-    else if (it->get_coop() == SCT) printf("SCT ");
-    else if (it->get_coop() == GAT) printf("GAT ");
-    else if (it->get_coop() == RED) printf("RED ");
+    printf("[PRINT:] Type: ");
+    if (it->get_coop() == D2D) printf("D2D");
+    else if (it->get_coop() == BRC) printf("BRC");
+    else if (it->get_coop() == SCT) printf("SCT");
+    else if (it->get_coop() == GAT) printf("GAT");
+    else if (it->get_coop() == RED) printf("RED");
 
-    printf("Mthd: ");
-    if (it->get_mhtd() == H2D) printf("H2D ");
-    else if (it->get_mhtd() == DVT) printf("DVT ");
-    else if (it->get_mhtd() == MXF) printf("MXF ");
+    printf(", Mthd: ");
+    if (it->get_mhtd() == P2P) printf("P2P");
+    else if (it->get_mhtd() == DVT) printf("DVT");
+    else if (it->get_mhtd() == MXF) printf("MXF");
 
-    printf("Size: %d ", it->get_size());
+    printf(", Size: %d ", it->get_size());
 
-    printf("Orig: ");
+    printf(", Orig: ");
     for (auto element : *it->get_orig()) {
         cout << element << " ";
     }
 
 
     // printf("%d ", it->get_size());
-    printf("Dest: ");
+    printf(", Dest: ");
     for (auto element : *it->get_dest()) {
         cout << element << " ";
     }
@@ -545,7 +704,7 @@ void print_ops(ve_ops *all_ops)
   } 
 }
 
-void ops_deps(ve_ops *all_ops, ve_deps *all_deps, int ***dev_mx_cpy_p,int n_hst, int n_dev)
+void ops_deps(ve_ops *all_ops, ve_deps *all_deps, int ***dev_mx_cpy_p,int n_hst, int n_dev, ve_meminfo *all_meminfo)
 {
   int m_paths = 4, m_hops = 5; // inputs
   int dev_a = 0, dev_b = 0, dev_i, dev_ii, i_hops, n_hops, i_paths, p_done, max_bw, lnk_bw, i_link, n_link, h_aff;
@@ -587,15 +746,15 @@ void ops_deps(ve_ops *all_ops, ve_deps *all_deps, int ***dev_mx_cpy_p,int n_hst,
     switch (t_op->get_coop())
     {
       case D2D:
-        printf("Setting D2D \n"); //ToBeDeleted
+        printf("[AUST:] Setting D2D: "); //ToBeDeleted
         // Unidirectional one-to-one transfer between devices
         // ToDo: Validate size orig/dest
         dev_a = *(t_op->get_orig())->begin();
         // n_hops = 2;
         switch (t_op->get_mhtd())
         {
-          case H2D:
-            printf("Using H2D\n"); //ToBeDeleted
+          case P2P:
+            printf("Using P2P\n"); //ToBeDeleted
             // Allow multiple destinations
             for (auto& dev_b : *t_op->get_dest())
             {
@@ -603,45 +762,45 @@ void ops_deps(ve_ops *all_ops, ve_deps *all_deps, int ***dev_mx_cpy_p,int n_hst,
               if ((*dev_mx_cpy_p)[dev_a][dev_b]>0) 
               {
                 // ToDo: Remove available link?
-                printf("Valid H/D Orig: %d Dest: %d Value: %d\n", dev_a, dev_b, (*dev_mx_cpy_p)[dev_a][dev_b]); //ToBeDeleted
+                printf("[AUST:] Valid H/D Orig: %d Dest: %d Value: %d\n", dev_a, dev_b, (*dev_mx_cpy_p)[dev_a][dev_b]); //ToBeDeleted
                 all_deps->push_back(new cops_dep(0, 0, dev_a, dev_b, t_op->get_size(), 0, 0, 0));
+                all_meminfo->push_back(new mem_info{dev_a, t_op->get_size()});
+                all_meminfo->push_back(new mem_info{dev_b, t_op->get_size()});
               }
               else
               {
-                printf("Invalid H/D combination\n"); //ToBeDeleted
+                printf("[AUST_ERR:] Invalid H/D combination\n"); //ToBeDeleted
               }
             }
             // return 0;
-            break; // H2D
+            break; // P2P
 
-          // Distant Vector
-          case DVT:
-          printf("Using DVT\n"); //ToBeDeleted
-            // ******************** HERE ******************** //
-            // Find multiple routes that reduce latency 
-            // Single sink
+          // Max-Flow
+          case MXF:
+            printf("Using MXF\n"); //ToBeDeleted
+            // Find paths with bigher bandwitdh
+            // Single Hop - Single source - Single sink
             dev_b = *(t_op->get_dest())->begin();
 
             i_paths = 0;
             p_done = 0;
             i_hops = 0;
             n_hops = n_dev + n_hst - 2; // max number of hops
-
+            all_meminfo->push_back(new mem_info{dev_a, t_op->get_size()});
+            all_meminfo->push_back(new mem_info{dev_b, t_op->get_size()});
             // ToDo: check numa affinty 
             // Check direct coonection (1 hop)
             if ((*dev_mx_cpy_p)[dev_a][dev_b]>0) 
             {
               // ToDo: Remove available link?
-              printf("Valid H/D Orig: %d Dest: %d Value: %d\n", dev_a, dev_b, (*dev_mx_cpy_p)[dev_a][dev_b]); //ToBeDeleted
-              op_deps = new cops_dep(0, 0, dev_a, dev_b, 0, 0, 0, i_paths);
-              all_deps->push_back(op_deps);
+              printf("[AUST:] Valid H/D Orig: %d Dest: %d Value: %d\n", dev_a, dev_b, (*dev_mx_cpy_p)[dev_a][dev_b]); //ToBeDeleted
+              all_deps->push_back(new cops_dep(0, 0, dev_a, dev_b, 0, 0, 0, i_paths));
               i_paths++;
               // Remove link
               (*dev_mx_cpy_p)[dev_a][dev_b] = 0;
             }
+
             // Build Paths
-            // for // all devices
-            // for // max hops
             while(!p_done){
               // Find connecting paths
               if(i_paths>=m_paths){
@@ -679,6 +838,7 @@ void ops_deps(ve_ops *all_ops, ve_deps *all_deps, int ***dev_mx_cpy_p,int n_hst,
                   all_deps->push_back(op_deps);
                   op_deps = new cops_dep(0, 0, dev_ii, dev_b, 0, 0, 0, i_paths);
                   all_deps->push_back(op_deps);
+                  all_meminfo->push_back(new mem_info{dev_ii, 0});
                   // Remove links
                   (*dev_mx_cpy_p)[dev_a][dev_ii] = 0;
                   (*dev_mx_cpy_p)[dev_ii][dev_b] = 0;
@@ -704,16 +864,24 @@ void ops_deps(ve_ops *all_ops, ve_deps *all_deps, int ***dev_mx_cpy_p,int n_hst,
               // printf("Orig: %d Dest: %d Size: %d Offs: %d\n", c_dep->orig, c_dep->dest, c_dep->size, c_dep->offs);
               dev_i++;
             }
+
+            for (auto& a_mem : *all_meminfo)
+            {
+              if (a_mem->node_id != dev_a && a_mem->node_id != dev_b) 
+              {
+                a_mem->size = t_op->get_size()/i_paths;
+              }
+            }
             
             // Size based on bandwidth
             // ******************** HERE ******************** //
 
 
-          break; // DVT
+          break; // MXF
 
-          // Max-Flow
-          case MXF:
-            printf("Using MXF\n"); //ToBeDeleted
+          // Distant Vector
+          case DVT:
+            printf("Using DVT\n"); //ToBeDeleted
             // Find multiple routes that increase throughput
             // Single sink
             dev_b = *(t_op->get_dest())->begin();
@@ -860,7 +1028,7 @@ void ops_deps(ve_ops *all_ops, ve_deps *all_deps, int ***dev_mx_cpy_p,int n_hst,
             // ToDo: Size based on bandwidth
             // ******************** HERE ******************** //
 
-          break; // MXF
+          break; // DVT
 
 
           default:
@@ -874,8 +1042,8 @@ void ops_deps(ve_ops *all_ops, ve_deps *all_deps, int ***dev_mx_cpy_p,int n_hst,
         // Unidirectional one-to-all transfer between devices
         switch (t_op->get_mhtd())
         {
-          case H2D:
-          printf("Using H2D\n");
+          case P2P:
+          printf("Using P2P\n");
           if (t_op->get_orig()->size() > 1)
           {
             // Numa affinity
@@ -919,7 +1087,7 @@ void ops_deps(ve_ops *all_ops, ve_deps *all_deps, int ***dev_mx_cpy_p,int n_hst,
             }
           }
           // return 0;
-          break; // H2D
+          break; // P2P
 
           // Distant Vector
           case DVT:
@@ -943,9 +1111,9 @@ void ops_deps(ve_ops *all_ops, ve_deps *all_deps, int ***dev_mx_cpy_p,int n_hst,
         printf("\n");
         switch (t_op->get_mhtd())
         {
-          case H2D:
+          case P2P:
           // return 0;
-          break; // H2D
+          break; // P2P
 
           // Distant Vector
           // Max-Flow
@@ -961,9 +1129,9 @@ void ops_deps(ve_ops *all_ops, ve_deps *all_deps, int ***dev_mx_cpy_p,int n_hst,
         printf("\n");
         switch (t_op->get_mhtd())
         {
-          case H2D:
+          case P2P:
           // return 0;
-          break; // H2D
+          break; // P2P
 
           // Distant Vector
           // Max-Flow
@@ -979,9 +1147,9 @@ void ops_deps(ve_ops *all_ops, ve_deps *all_deps, int ***dev_mx_cpy_p,int n_hst,
         printf("\n");
         switch (t_op->get_mhtd())
         {
-          case H2D:
+          case P2P:
           // return 0;
-          break; // H2D
+          break; // P2P
 
           // Distant Vector
           // Max-Flow
@@ -1000,7 +1168,7 @@ void ops_deps(ve_ops *all_ops, ve_deps *all_deps, int ***dev_mx_cpy_p,int n_hst,
         
 
       // case DVT:
-      //   printf("H2D\n");
+      //   printf("P2P\n");
 
       // break; // DVT
 
@@ -1018,43 +1186,75 @@ void ops_deps(ve_ops *all_ops, ve_deps *all_deps, int ***dev_mx_cpy_p,int n_hst,
 
 void print_cpat(ve_deps *all_deps)
 {
-  printf("Communication Pattern\n");
+  printf("[OUT:] Communication Pattern: \n");
   for (auto& a_dep : *all_deps)
   {
-    // Print the values
-    printf("Orig: %d Dest: %d Size: %d O_Offs: %d D_Offs: %d, Path No.: %d\n", a_dep->orig, a_dep->dest, a_dep->size, a_dep->o_of, a_dep->d_of, a_dep->ipth);
-    // cout << it->orig << ' ';
+    // Print Output values
+    printf("[OUT:] Orig: %d Dest: %d Size: %d O_Offs: %d D_Offs: %d, Path No.: %d\n", a_dep->orig, a_dep->dest, a_dep->size, a_dep->o_of, a_dep->d_of, a_dep->ipth);
   }
 }
 
+void auto_malloc(ve_meminfo *all_meminfo, void ** mem_ptr, int n_hst, int n_dev)
+{
+  size_t chunk_s;
+  int dev_id;
   // Memory allocation
-  // // Allocate memory
-  // cnk_len = arr_len/dest_no;
-  // size_c = sizeof(int) * cnk_len;
+  // printf("mem_ptr: %p \n", mem_ptr);
+  printf("[MALLOC:] Memory  Allocation:\n");
+  for (auto& a_mem : *all_meminfo)
+  {
+    chunk_s = sizeof(int) * a_mem->size;
+    if (a_mem->node_id<n_hst)
+    {
+      printf("[MALLOC:] Dev: %d Size: %zu\n", a_mem->node_id, chunk_s);
+      // printf("mem_ptr: %p \n", mem_ptr[a_mem->node_id]);
+      mem_ptr[a_mem->node_id] = numa_alloc_onnode(chunk_s, a_mem->node_id);
+    }
+    else
+    {
+      dev_id = a_mem->node_id-n_hst;
+      printf("[MALLOC2:] Node: %d Dev: %d Size: %zu\n", a_mem->node_id, dev_id, chunk_s);
+      // printf("mem_ptr: %p \n", mem_ptr[a_mem->node_id]);
+      mem_ptr[a_mem->node_id] = omp_target_alloc(chunk_s, dev_id);
+      
+    } 
+  }
+}
+
+
+// void exec_op(ve_deps *all_deps, void *** mem_ptr)
+// {
+//   printf("[EXEC:] Execution:\n");
+//   for (auto& a_dep : *all_deps)
+//   {
+//     // Print the values
+//     printf("[EXEC:] Orig: %d Dest: %d Size: %d O_Offs: %d D_Offs: %d, Path No.: %d\n", a_dep->orig, a_dep->dest, a_dep->size, a_dep->o_of, a_dep->d_of, a_dep->ipth);
+//   }
   
-  // #pragma omp parallel num_threads(num_thr) private(cpu, node, status, ret_code, ptr_to_check)
-  // {
-  //   syscall(SYS_getcpu, &cpu, &node, NULL);
-  //   switch(cpu){
-  //     case 0:
-  //       if (v_flag) printf("Alloc Host_0: CPU core %.2u NUMA node %u Thread %.2d\n", cpu, node, omp_get_thread_num());
-  //       x_arr_0 = (int *)omp_alloc(size_c, x_alloc);
-  //       ptr_to_check = (void**) &x_arr_0;
-  //       ret_code=move_pages(0 /*self memory */, 1, ptr_to_check, NULL, status, 0);
-  //       if (v_flag) printf("Memory at %p is at %d node (retcode %d)\n", ptr_to_check, status[0], ret_code);
-  //     break;
-  //     case 22:
-  //       if (v_flag) printf("Alloc Host_1: CPU core %.2u NUMA node %u Thread %.2d\n", cpu, node, omp_get_thread_num());
-  //       x_arr_1 = (int *)omp_alloc(size_c, y_alloc);
-  //       ptr_to_check = (void**) &x_arr_1;
-  //       ret_code=move_pages(0 /*self memory */, 1, ptr_to_check, NULL, status, 0);
-  //       if (v_flag) printf("Memory at %p is at %d node (retcode %d)\n", ptr_to_check, status[0], ret_code);
-  //     break;
-  //     // default:
-  //       // if (v_flag) printf("Default: CPU core %.2u NUMA node %u Thread %.2d\n", cpu, node, omp_get_thread_num());
-  //   }
-  //   #pragma omp barrier
-  // }
+
+// }
+
+void auto_mfree(ve_meminfo *all_meminfo, void ** mem_ptr, int n_hst, int n_dev)
+{
+  size_t chunk_s, dev_id;
+  // Memory Free
+  printf("[MFREE:] Memory Free:\n");
+  for (auto& a_mem : *all_meminfo)
+  {
+    chunk_s = sizeof(int) * a_mem->size;
+    if (a_mem->node_id<n_hst)
+    {
+      printf("[MFREE:] Dev: %d Size: %d\n", a_mem->node_id, a_mem->size);
+      numa_free(mem_ptr[a_mem->node_id], chunk_s);
+    }
+    else
+    {
+      dev_id = a_mem->node_id-n_hst;
+      printf("[MFREE:] Dev: %d Size: %d\n", a_mem->node_id, a_mem->size);
+      omp_target_free(mem_ptr[a_mem->node_id], dev_id);
+    }
+  }
+}
 
 
   // #pragma omp parallel num_threads(num_thr) private(dest_id, cpu, node)
@@ -1166,7 +1366,7 @@ void print_cpat(ve_deps *all_deps)
 //**************************************************//
 //                      COMPILE                     //
 //**************************************************//
-
+// PROG=auto_s_v0; clang++ -fopenmp -fopenmp-targets=nvptx64 -o $PROG.x --cuda-gpu-arch=sm_70 $PROG.cpp -lnuma
 // PROG=d2d_test_7; clang++ -fopenmp -fopenmp-targets=nvptx64 -o $PROG.x --cuda-gpu-arch=sm_70 -L/soft/compilers/cuda/cuda-11.0.2/lib64 -L/soft/compilers/cuda/cuda-11.0.2/targets/x86_64-linux/lib/ -I/soft/compilers/cuda/cuda-11.0.2/include -ldl -lcudart -pthread $PROG.cpp
 
 //**************************************************//
