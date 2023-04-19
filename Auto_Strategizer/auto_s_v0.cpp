@@ -1275,7 +1275,7 @@ void auto_mfree(ve_meminfo *all_meminfo, void ** mem_ptr, int n_hst, int n_dev)
   // }
 
 
-zz
+
   // printf("All Operations\n");
   // for (auto& it : all_ops)
   // {
