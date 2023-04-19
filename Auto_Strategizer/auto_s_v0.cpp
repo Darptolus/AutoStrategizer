@@ -25,9 +25,9 @@ class cops_dep
     cops_dep * p_dep;
   public:
     // cops_dep(int a_deps, int a_done, int a_orig, int a_dest, int a_size, int a_oof, int a_dof):
-    // deps(a_deps), done(a_done), orig(a_orig), dest(a_dest), size(a_size), o_of(a_oof), d_of(a_dof){};
+    // deps(a_deps), done(a_done), orig(a_orig), dest(a_dest), size(a_size), of_s(a_oof), of_d(a_dof){};
     cops_dep(int a_deps, int a_done, int a_orig, int a_dest, int a_size, int a_oof, int a_dof, int a_ipth):
-    deps(a_deps), done(a_done), orig(a_orig), dest(a_dest), size(a_size), o_of(a_oof), d_of(a_dof), ipth(a_ipth){};
+    deps(a_deps), done(a_done), orig(a_orig), dest(a_dest), size(a_size), of_s(a_oof), of_d(a_dof), ipth(a_ipth){};
     ~cops_dep(){};
     // Todo: Add set/get methods
     int deps;
@@ -36,9 +36,9 @@ class cops_dep
     int dest;
     int o_id;
     int d_id;
-    int size;
-    int o_of;     // Origin Offset
-    int d_of;     // Destination Offset
+    size_t size;
+    size_t of_s;     // Origin Offset
+    size_t of_d;     // Destination Offset
     int ipth;
 } *op_deps; // Remove
 
@@ -55,9 +55,11 @@ class cops_def
   private:
     std::vector<int> o_orig;
     std::vector<int> o_dest;
-    int size;
+    int size; // ToDo: Change to size_t
     c_ops cop; // Collective operation
     h_mth mht; // Heuristic Method
+    int n_orig;
+    int n_dest;
   public:
     cops_def(){};
     // cops_def(int a_orig, int a_dest, int a_size, c_ops a_cop, h_mth a_mht):
@@ -73,6 +75,8 @@ class cops_def
     int get_size(){return size;};
     void set_coop(c_ops a_cop){cop = a_cop;};
     void set_mhtd(h_mth a_mht){mht = a_mht;};
+    int get_norig(){return o_orig.size();};
+    int get_ndest(){return o_dest.size();};
     c_ops get_coop(){return cop;};
     h_mth get_mhtd(){return mht;};
     std::vector<int>* get_orig(){return &o_orig;};
@@ -87,7 +91,7 @@ ve_ops all_ops;
 struct mem_info
 {
   int node_id;
-  int size;
+  size_t size;
 };
 
 typedef std::vector<mem_info*> ve_meminfo;
@@ -109,9 +113,10 @@ void auto_mfree(ve_meminfo *all_meminfo, void ** mem_ptr, int n_hst, int n_dev);
 int main()
 {
   int n_dev = 0, n_net = 0, dev_a = 0, dev_b = 0, dev_i, dev_ii, n_nodes = 1, n_hst = 2, n_nma = 2, arr_len;
-  int n_org, n_dst, f_sts;
+  int f_sts;
   int **hst_mx, **dev_mx, **hst_mx_cpy, **dev_mx_cpy; 
-  void ** mem_ptr;
+  void **mem_ptr;
+  int *o_arr;
 
   double start, end;
   // unsigned cpu, node;
@@ -159,42 +164,28 @@ int main()
 //**************************************************//
 
   mem_ptr = (void **) malloc(sizeof(void**) * (n_dev+n_hst));
-  // printf("mem_ptr: %p \n", &mem_ptr);
   auto_malloc(&all_meminfo, mem_ptr, n_hst, n_dev);
 
-  // size_t chunk_s;
-  // int dev_id;
-  // // Memory allocation
-  // // printf("mem_ptr: %p \n", mem_ptr);
-  // printf("[MALLOC:] Memory  Allocation:\n");
-  // for (auto& a_mem : all_meminfo)
-  // {
-  //   chunk_s = sizeof(int) * a_mem->size;
-  //   if (a_mem->node_id<n_hst)
-  //   {
-  //     printf("[MALLOC:] Dev: %d Size: %zu\n", a_mem->node_id, chunk_s);
-  //     // printf("mem_ptr: %p \n", mem_ptr[a_mem->node_id]);
-  //     mem_ptr[a_mem->node_id] = numa_alloc_onnode(chunk_s, a_mem->node_id);
-  //   }
-  //   else
-  //   {
-  //     dev_id = a_mem->node_id-n_hst;
-  //     printf("[MALLOC2:] Node: %d Dev: %d Size: %zu\n", a_mem->node_id, dev_id, chunk_s);
-  //     // printf("mem_ptr: %p \n", mem_ptr[a_mem->node_id]);
-  //     mem_ptr[a_mem->node_id] = omp_target_alloc(chunk_s, dev_id);
-      
-  //   } 
-  // }
 
 //**************************************************//
 // Array initialization (copy to device(s) if necesary)
 //**************************************************//
 
-// if #origin_dev = 1
-// for (int i=0; i<arr_len; ++i)
-//     x_arr[i]=i+v_no;
-// else
+  def_ops = all_ops.front();
+  if (def_ops->get_norig() > 1){
+    printf("Multi_Origin \n");
+  }
+  else
+  {
+    o_arr = (int*)mem_ptr[all_meminfo[0]->node_id];
+    for (int i=0; i<all_meminfo[0]->size; ++i)
+      o_arr[i]=i; //+v_no;
+  }
 
+  printf("Host -> Value of X: ");
+  for (int j=0; j<all_meminfo[0]->size; ++j)
+    printf("%d ", o_arr[j]);
+  printf("\n");
 
 //**************************************************//
 // Execute
@@ -202,74 +193,66 @@ int main()
 
   // exec_op(&all_deps, &mem_ptr);
 
-printf("[EXEC:] Execution:\n");
-
-
-  for (auto& a_dep : all_deps)
-  {
-    // Print the values
-    printf("[EXEC:] Orig: %d Dest: %d Size: %d O_Offs: %d D_Offs: %d, Path No.: %d\n", a_dep->orig, a_dep->dest, a_dep->size, a_dep->o_of, a_dep->d_of, a_dep->ipth);
+  printf("[EXEC:] Execution:\n");
   
-  
-  // #pragma omp parallel num_threads(num_thr) private(dest_id, cpu, node)
+  // for (auto& a_dep : all_deps)
   // {
-  //   #pragma omp single
-  //   {
-  //     start = omp_get_wtime();
-  //   }
-  //   syscall(SYS_getcpu, &cpu, &node, NULL);
-  //   switch(cpu){
-  //     case 0:
-  //       if (v_flag) printf("MemCpy Dev_0: CPU core %.2u NUMA node %u Thread %d\n", cpu, node, omp_get_thread_num());
-  //         omp_target_memcpy
-  //         (
-  //           x_ptr[0],                                 // dst
-  //           x_arr_0,                                  // src
-  //           size_c,                                   // length 
-  //           0,                                        // dst_offset
-  //           0,                                        // src_offset, 
-  //           0,                                        // dst_device_num
-  //           omp_get_initial_device()                  // src_device_num
-  //         );
-  //     break;
-  //     case 22:
-  //       dest_id = 2;
-  //       if (v_flag) printf("MemCpy Dev_1: CPU core %.2u NUMA node %u Thread %d\n", cpu, node, omp_get_thread_num());
-  //         omp_target_memcpy
-  //         (
-  //           x_ptr[2],                     // dst
-  //           x_arr_1,                            // src
-  //           size_c,                             // length 
-  //           0,                                  // dst_offset
-  //           0,                                  // src_offset, 
-  //           2,                            // dst_device_num
-  //           omp_get_initial_device()            // src_device_num
-  //         );
-  //         omp_target_memcpy
-  //         (
-  //           x_ptr[0],                           // dst
-  //           x_ptr[2],                     // src
-  //           size_c,                             // length 
-  //           size_c,                             // dst_offset
-  //           0,                                  // src_offset, 
-  //           0,                                  // dst_device_num
-  //           2                             // src_device_num
-  //         );
-  //     break;
-  //     // default:
-  //     //   if (v_flag) printf("Default: CPU core %.2u NUMA node %u Thread %d\n", cpu, node, omp_get_thread_num());
-  //   }
-  //   #pragma omp barrier
-  //   #pragma omp single
-  //   {
-  //     end = omp_get_wtime();
-  //   }
-  //   #pragma omp barrier
+  //   printf("[EXEC:] Orig: %d Dest: %d Size: %zu O_Offs: %zu D_Offs: %zu, Path No.: %d\n", a_dep->orig, a_dep->dest, a_dep->size, a_dep->of_s, a_dep->of_d, a_dep->ipth);
   // }
-  
-  
-  }
 
+#pragma omp parallel shared(mem_ptr) num_threads(all_deps.size()) 
+  {
+    #pragma omp single
+    {
+      start = omp_get_wtime();
+    // }
+
+    for (auto& a_dep : all_deps)
+    {
+      if (a_dep->deps == 0){
+        #pragma omp task depend(out:mem_ptr[a_dep->orig]) shared(mem_ptr)
+        {
+          printf("Thread = %d\n", omp_get_thread_num());
+          printf("[EXEC:] Orig: %d (ID: %d) Dest: %d (ID: %d) - Size: %zu O_Offs: %zu D_Offs: %zu, Path No.: %d\n", a_dep->orig, a_dep->o_id, a_dep->dest, a_dep->d_id, a_dep->size, a_dep->of_s, a_dep->of_d, a_dep->ipth);
+          omp_target_memcpy
+          (
+            mem_ptr[a_dep->dest],                     // dst
+            mem_ptr[a_dep->orig],                     // src
+            a_dep->size,                              // length 
+            a_dep->of_d,                              // dst_offset
+            a_dep->of_s,                              // src_offset, 
+            a_dep->d_id,                              // dst_device_num
+            a_dep->o_id                               // src_device_num
+          );
+        }
+      }else{
+        #pragma omp task depend(in:mem_ptr[a_dep->orig]) shared(mem_ptr)
+        {
+          printf("Thread = %d\n", omp_get_thread_num());
+          printf("[EXEC2:]Orig: %d (ID: %d) Dest: %d (ID: %d) - Size: %zu O_Offs: %zu D_Offs: %zu, Path No.: %d\n", a_dep->orig, a_dep->o_id, a_dep->dest, a_dep->d_id, a_dep->size, a_dep->of_s, a_dep->of_d, a_dep->ipth);
+          omp_target_memcpy
+          (
+            mem_ptr[a_dep->dest],                     // dst
+            mem_ptr[a_dep->orig],                     // src
+            a_dep->size,                              // length 
+            a_dep->of_d,                              // dst_offset
+            a_dep->of_s,                              // src_offset, 
+            a_dep->d_id,                              // dst_device_num
+            a_dep->o_id                               // src_device_num
+          );
+        }
+      }
+      
+    
+    }
+  #pragma omp taskwait
+  // #pragma omp barrier
+  //   #pragma omp single
+  //   {
+      end = omp_get_wtime();
+    }
+    #pragma omp barrier
+  }
 
 
 
@@ -280,25 +263,6 @@ printf("[EXEC:] Execution:\n");
 
   // printf("\n");
   auto_mfree(&all_meminfo, mem_ptr, n_hst, n_dev);
-
-  // size_t chunk_s, dev_id;
-  // printf("[MFREE:] Memory Free:\n");
-  // for (auto& a_mem : all_meminfo)
-  // {
-  //   chunk_s = sizeof(int) * a_mem->size;
-  //   if (a_mem->node_id<n_hst)
-  //   {
-  //     printf("[MFREE:] Dev: %d Size: %d\n", a_mem->node_id, a_mem->size);
-  //     numa_free(mem_ptr[a_mem->node_id], chunk_s);
-  //   }
-  //   else
-  //   {
-  //     dev_id = a_mem->node_id-n_hst;
-  //     printf("[MFREE:] Dev: %d Size: %d\n", a_mem->node_id, a_mem->size);
-  //     omp_target_free(mem_ptr[a_mem->node_id], dev_id);
-  //   }
-  // }
-
 
   free(dev_mx);
   
@@ -764,8 +728,8 @@ void ops_deps(ve_ops *all_ops, ve_deps *all_deps, int ***dev_mx_cpy_p,int n_hst,
                 // ToDo: Remove available link?
                 printf("[AUST:] Valid H/D Orig: %d Dest: %d Value: %d\n", dev_a, dev_b, (*dev_mx_cpy_p)[dev_a][dev_b]); //ToBeDeleted
                 all_deps->push_back(new cops_dep(0, 0, dev_a, dev_b, t_op->get_size(), 0, 0, 0));
-                all_meminfo->push_back(new mem_info{dev_a, t_op->get_size()});
-                all_meminfo->push_back(new mem_info{dev_b, t_op->get_size()});
+                all_meminfo->push_back(new mem_info{dev_a, sizeof(int) * t_op->get_size()});
+                all_meminfo->push_back(new mem_info{dev_b, sizeof(int) * t_op->get_size()});
               }
               else
               {
@@ -786,8 +750,8 @@ void ops_deps(ve_ops *all_ops, ve_deps *all_deps, int ***dev_mx_cpy_p,int n_hst,
             p_done = 0;
             i_hops = 0;
             n_hops = n_dev + n_hst - 2; // max number of hops
-            all_meminfo->push_back(new mem_info{dev_a, t_op->get_size()});
-            all_meminfo->push_back(new mem_info{dev_b, t_op->get_size()});
+            all_meminfo->push_back(new mem_info{dev_a,  sizeof(int) * t_op->get_size()});
+            all_meminfo->push_back(new mem_info{dev_b,  sizeof(int) * t_op->get_size()});
             // ToDo: check numa affinty 
             // Check direct coonection (1 hop)
             if ((*dev_mx_cpy_p)[dev_a][dev_b]>0) 
@@ -859,8 +823,8 @@ void ops_deps(ve_ops *all_ops, ve_deps *all_deps, int ***dev_mx_cpy_p,int n_hst,
             for (auto& a_dep : *all_deps)
             {
               a_dep->size = t_op->get_size()/i_paths;
-              a_dep->o_of = a_dep->o_of*a_dep->size;
-              a_dep->d_of = a_dep->d_of*a_dep->size;
+              a_dep->of_s = a_dep->of_s*a_dep->size;
+              a_dep->of_d = a_dep->of_d*a_dep->size;
               // printf("Orig: %d Dest: %d Size: %d Offs: %d\n", c_dep->orig, c_dep->dest, c_dep->size, c_dep->offs);
               dev_i++;
             }
@@ -1008,18 +972,18 @@ void ops_deps(ve_ops *all_ops, ve_deps *all_deps, int ***dev_mx_cpy_p,int n_hst,
               a_dep->size = t_op->get_size()/i_paths;
               if (a_dep->orig == dev_a) // Origin
               {
-                a_dep->o_of = a_dep->ipth*a_dep->size;
-                a_dep->d_of = 0; 
+                a_dep->of_s = a_dep->ipth*a_dep->size;
+                a_dep->of_d = 0; 
               }
               else if (a_dep->dest == dev_b) // Destination
               {
-                a_dep->o_of = 0;
-                a_dep->d_of = a_dep->ipth*a_dep->size; 
+                a_dep->of_s = 0;
+                a_dep->of_d = a_dep->ipth*a_dep->size; 
               }
               else // Intermediate 
               {
-                a_dep->o_of = 0;
-                a_dep->d_of = 0; 
+                a_dep->of_s = 0;
+                a_dep->of_d = 0; 
               }
               // printf("Orig: %d Dest: %d Size: %d Offs: %d\n", c_dep->orig, c_dep->dest, c_dep->size, c_dep->offs);
               dev_i++;
@@ -1190,7 +1154,7 @@ void print_cpat(ve_deps *all_deps)
   for (auto& a_dep : *all_deps)
   {
     // Print Output values
-    printf("[OUT:] Orig: %d Dest: %d Size: %d O_Offs: %d D_Offs: %d, Path No.: %d\n", a_dep->orig, a_dep->dest, a_dep->size, a_dep->o_of, a_dep->d_of, a_dep->ipth);
+    printf("[OUT:] Orig: %d Dest: %d Size: %zu O_Offs: %zu D_Offs: %zu, Path No.: %d\n", a_dep->orig, a_dep->dest, a_dep->size, a_dep->of_s, a_dep->of_d, a_dep->ipth);
   }
 }
 
@@ -1199,23 +1163,20 @@ void auto_malloc(ve_meminfo *all_meminfo, void ** mem_ptr, int n_hst, int n_dev)
   size_t chunk_s;
   int dev_id;
   // Memory allocation
-  // printf("mem_ptr: %p \n", mem_ptr);
   printf("[MALLOC:] Memory  Allocation:\n");
   for (auto& a_mem : *all_meminfo)
   {
-    chunk_s = sizeof(int) * a_mem->size;
+    // chunk_s = sizeof(int) * a_mem->size;
     if (a_mem->node_id<n_hst)
     {
       printf("[MALLOC:] Dev: %d Size: %zu\n", a_mem->node_id, chunk_s);
-      // printf("mem_ptr: %p \n", mem_ptr[a_mem->node_id]);
-      mem_ptr[a_mem->node_id] = numa_alloc_onnode(chunk_s, a_mem->node_id);
+      mem_ptr[a_mem->node_id] = numa_alloc_onnode(a_mem->size, a_mem->node_id);
     }
     else
     {
       dev_id = a_mem->node_id-n_hst;
       printf("[MALLOC2:] Node: %d Dev: %d Size: %zu\n", a_mem->node_id, dev_id, chunk_s);
-      // printf("mem_ptr: %p \n", mem_ptr[a_mem->node_id]);
-      mem_ptr[a_mem->node_id] = omp_target_alloc(chunk_s, dev_id);
+      mem_ptr[a_mem->node_id] = omp_target_alloc(a_mem->size, dev_id);
       
     } 
   }
@@ -1228,7 +1189,7 @@ void auto_malloc(ve_meminfo *all_meminfo, void ** mem_ptr, int n_hst, int n_dev)
 //   for (auto& a_dep : *all_deps)
 //   {
 //     // Print the values
-//     printf("[EXEC:] Orig: %d Dest: %d Size: %d O_Offs: %d D_Offs: %d, Path No.: %d\n", a_dep->orig, a_dep->dest, a_dep->size, a_dep->o_of, a_dep->d_of, a_dep->ipth);
+//     printf("[EXEC:] Orig: %d Dest: %d Size: %d O_Offs: %d D_Offs: %d, Path No.: %d\n", a_dep->orig, a_dep->dest, a_dep->size, a_dep->of_s, a_dep->of_d, a_dep->ipth);
 //   }
   
 
@@ -1244,13 +1205,13 @@ void auto_mfree(ve_meminfo *all_meminfo, void ** mem_ptr, int n_hst, int n_dev)
     chunk_s = sizeof(int) * a_mem->size;
     if (a_mem->node_id<n_hst)
     {
-      printf("[MFREE:] Dev: %d Size: %d\n", a_mem->node_id, a_mem->size);
+      printf("[MFREE:] Dev: %d Size: %zu\n", a_mem->node_id, a_mem->size);
       numa_free(mem_ptr[a_mem->node_id], chunk_s);
     }
     else
     {
       dev_id = a_mem->node_id-n_hst;
-      printf("[MFREE:] Dev: %d Size: %d\n", a_mem->node_id, a_mem->size);
+      printf("[MFREE:] Dev: %d Size: %zu\n", a_mem->node_id, a_mem->size);
       omp_target_free(mem_ptr[a_mem->node_id], dev_id);
     }
   }
@@ -1314,12 +1275,7 @@ void auto_mfree(ve_meminfo *all_meminfo, void ** mem_ptr, int n_hst, int n_dev)
   // }
 
 
-
-
-
-
-
-
+zz
   // printf("All Operations\n");
   // for (auto& it : all_ops)
   // {
