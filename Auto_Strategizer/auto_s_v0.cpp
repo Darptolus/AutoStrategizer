@@ -37,13 +37,12 @@ namespace autostrat
         n_hst = n_nma; // Single Node
         numa_d = (numa_dom*) malloc(n_nma * sizeof(numa_dom));
         // Initialize numa domains
-        for (int n_dom = 0; n_dom < n_nma; ++n_dom) {
+        for (int n_dom = 0; n_dom < n_nma; ++n_dom)
           numa_d[n_dom].conf = 0;
-        }
         // Fill Host to Host information
       };
       ~arch(){
-        for (int dev = 0; dev < (n_dev + n_hst); ++dev)
+        for (int dev = 0; dev < (n_nod); ++dev)
           free(dev_mx[dev]);
         free(dev_mx);
         free(numa_d);
@@ -62,7 +61,7 @@ namespace autostrat
         node_id = (int*) malloc(n_nod * sizeof(int));
         // Allocate memory for Interconnectivity Matrix 
         dev_mx = (int**) malloc((n_nod) * sizeof(int*));
-        printf("host_id: %d\n", omp_get_initial_device());
+        // printf("host_id: %d\n", omp_get_initial_device());
         for (int dev = 0; dev < (n_nod); ++dev)
           {
             dev_mx[dev] = (int*)malloc((n_nod) * sizeof(int));
@@ -71,7 +70,7 @@ namespace autostrat
               node_id[dev]=omp_get_initial_device();
             else
               node_id[dev]=dev-n_hst;
-            printf("Dev: %d ID: %d\n", dev, node_id[dev]);
+            // printf("Dev: %d ID: %d\n", dev, node_id[dev]);
           }
       }
       void set_nhst(int a_nhst){n_hst = a_nhst;}
@@ -185,19 +184,22 @@ int main()
   double start, end;
   // unsigned cpu, node;
 
-  ifstream t_dgx ("topo_dgx");
-  ifstream t_smx ("topo_smx");
 
   ifstream c_ops ("test_ops");
 
   // numa_d = (numa_dom*) malloc((n_nma) * sizeof(numa_dom));
   
   arch t_arch;
-  // Get Topology ``
-  // if (get_topo(&t_dgx, n_hst, &dev_mx, &n_dev, &n_net)) printf("Unable to get topology\n");
-  if (get_topo(&t_dgx, &t_arch)) printf("Unable to get topology\n");
+  // Get Topology
+
+  // ifstream t_dgx ("topo_dgx");
+  // if (v_flag) printf("DGX\n"); // ToDo:  
+  // if (get_topo(&t_dgx, &t_arch)) printf("Unable to get topology\n");
   
-  if (v_flag) printf("DGX\n"); // ToDo:
+  ifstream t_smx ("topo_smx");
+  if (v_flag) printf("SMX\n"); // ToDo:
+  if (get_topo(&t_smx, &t_arch)) printf("Unable to get topology\n");
+  
   if (v_flag) cout << "no. Devices: " << t_arch.get_ndev() << "\n";
   if (v_flag) cout << "no. Networks: " << t_arch.get_nnet() << "\n";
 
@@ -236,18 +238,21 @@ int main()
 
   // ToDo: 
   def_ops = all_ops.front();
+  int dev_o;
   if (def_ops->get_norig() > 1){
-    if (v_flag) printf("Multi_Origin \n");
+    if (v_flag) printf("Multi Origin \n");
   }
   else
   {
-    o_arr = (int*)mem_ptr[all_meminfo[0]->node_id];
-    for (int i=0; i<all_meminfo[0]->size/sizeof(int); ++i)
+    dev_o = (def_ops->get_orig())->front();
+    if (v_flag) printf("Single Origin dev: %d\n", dev_o);
+    o_arr = (int*)mem_ptr[all_meminfo[dev_o]->node_id];
+    for (int i=0; i<all_meminfo[dev_o]->size/sizeof(int); ++i)
       o_arr[i]=i; //+v_no;
   }
 
-  printf("Host -> Value of X: ");
-  for (int j=0; j<(all_meminfo[0]->size/sizeof(int)); ++j)
+  // printf("Host -> Value of X: ");
+  for (int j=0; j<(all_meminfo[dev_o]->size/sizeof(int)); ++j)
     printf("%d ", o_arr[j]);
   printf("\n");
 
@@ -274,18 +279,18 @@ int main()
       for (auto& a_dep : all_deps)
       {
         if (a_dep->deps == 0){
-          #pragma omp task depend(out:mem_ptr[a_dep->orig]) shared(mem_ptr)
+          #pragma omp task depend(out:mem_ptr[a_dep->dest]) shared(mem_ptr)
           {
-            printf("Thread = %d\n", omp_get_thread_num());
-            printf("host_id: %d\n", omp_get_initial_device());
-            printf("[EXEC:] Orig: %d (ID: %d) Dest: %d (ID: %d) - Size: %zu O_Offs: %zu D_Offs: %zu, Path No.: %d\n", a_dep->orig, a_dep->o_id, a_dep->dest, a_dep->d_id, a_dep->size, a_dep->of_s, a_dep->of_d, a_dep->ipth);
+            // printf("Thread = %d\n", omp_get_thread_num());
+            // printf("host_id: %d\n", omp_get_initial_device());
+            printf("[EXEC:] Orig: %d (ID: %d) - Dest: %d (ID: %d) - Size: %zu O_Offs: %zu D_Offs: %zu, Path No.: %d - Thread = %d\n", a_dep->orig, a_dep->o_id, a_dep->dest, a_dep->d_id, a_dep->size, a_dep->of_s, a_dep->of_d, a_dep->ipth, omp_get_thread_num());
             omp_target_memcpy
             (
               mem_ptr[a_dep->dest],                     // dst
               mem_ptr[a_dep->orig],                     // src
-              a_dep->size * sizeof(int),                              // length 
-              a_dep->of_d,                              // dst_offset
-              a_dep->of_s,                              // src_offset, 
+              a_dep->size * sizeof(int),                // length 
+              a_dep->of_d * sizeof(int),                // dst_offset
+              a_dep->of_s * sizeof(int),                // src_offset, 
               a_dep->d_id,                              // dst_device_num
               a_dep->o_id                               // src_device_num
             );
@@ -293,15 +298,15 @@ int main()
         }else{
           #pragma omp task depend(in:mem_ptr[a_dep->orig]) shared(mem_ptr)
           {
-            printf("Thread = %d\n", omp_get_thread_num());
-            printf("[EXEC2:]Orig: %d (ID: %d) Dest: %d (ID: %d) - Size: %zu O_Offs: %zu D_Offs: %zu, Path No.: %d\n", a_dep->orig, a_dep->o_id, a_dep->dest, a_dep->d_id, a_dep->size, a_dep->of_s, a_dep->of_d, a_dep->ipth);
+            // printf("Thread = %d\n", omp_get_thread_num());
+            printf("[EXEC2:]Orig: %d (ID: %d) - Dest: %d (ID: %d) - Size: %zu O_Offs: %zu D_Offs: %zu, Path No.: %d - Thread = %d\n", a_dep->orig, a_dep->o_id, a_dep->dest, a_dep->d_id, a_dep->size, a_dep->of_s, a_dep->of_d, a_dep->ipth, omp_get_thread_num());
             omp_target_memcpy
             (
               mem_ptr[a_dep->dest],                     // dst
               mem_ptr[a_dep->orig],                     // src
-              a_dep->size *sizeof(int),                              // length 
-              a_dep->of_d,                              // dst_offset
-              a_dep->of_s,                              // src_offset, 
+              a_dep->size * sizeof(int),                // length 
+              a_dep->of_d * sizeof(int),                // dst_offset
+              a_dep->of_s * sizeof(int),                // src_offset, 
               a_dep->d_id,                              // dst_device_num
               a_dep->o_id                               // src_device_num
             );
@@ -320,20 +325,42 @@ int main()
 //**************************************************//
 // Verify
 //**************************************************//
-for (auto& a_dep : all_deps)
+// for (auto& a_dep : all_deps)
+// {
+//   printf("[VAL:]Orig: %d (ID: %d) Dest: %d (ID: %d) - Size: %zu O_Offs: %zu D_Offs: %zu, Path No.: %d\n", a_dep->orig, a_dep->o_id, a_dep->dest, a_dep->d_id, a_dep->size, a_dep->of_s, a_dep->of_d, a_dep->ipth);
+//   arr_len = a_dep->size;
+//   int dest = a_dep->dest;
+//   int d_id = a_dep->d_id;          
+//   #pragma omp target device(d_id) map(mem_ptr[dest], arr_len) 
+//   {
+//     int* x = (int*)mem_ptr[dest];
+//     printf("%s No. %d ArrX = ", omp_is_initial_device()?"Host":"Device", omp_get_device_num());
+//     for (int j=0; j<arr_len; ++j){
+//       printf("%d ", *(x+j));
+//     }
+//     printf("\n");
+//   }
+// }
+
+
+for (auto& a_mem : all_meminfo)
 {
-  printf("[VAL:]Orig: %d (ID: %d) Dest: %d (ID: %d) - Size: %zu O_Offs: %zu D_Offs: %zu, Path No.: %d\n", a_dep->orig, a_dep->o_id, a_dep->dest, a_dep->d_id, a_dep->size, a_dep->of_s, a_dep->of_d, a_dep->ipth);
-  arr_len = a_dep->size/sizeof(int);
-  int dest = a_dep->dest;
-  int d_id = a_dep->d_id;          
-  #pragma omp target device(d_id) map(mem_ptr[dest], arr_len) 
+  // printf("[VAL:]Orig: %d (ID: %d) Dest: %d (ID: %d) - Size: %zu O_Offs: %zu D_Offs: %zu, Path No.: %d\n", a_dep->orig, a_dep->o_id, a_dep->dest, a_dep->d_id, a_dep->size, a_dep->of_s, a_dep->of_d, a_dep->ipth);
+  
+  arr_len = a_mem->size / sizeof(int);
+  int n_id = t_arch.node_id[a_mem->node_id];
+  int d_id = a_mem->node_id;
+  printf("[VAL:] Node: %d Dev_ID: %d Size: %zu\n", a_mem->node_id, n_id, a_mem->size);
+
+  #pragma omp target device(n_id) map(mem_ptr[d_id], arr_len) 
   {
-    int* x = (int*)mem_ptr[dest];
+    int* x = (int*)mem_ptr[d_id];
     printf("%s No. %d ArrX = ", omp_is_initial_device()?"Host":"Device", omp_get_device_num());
     for (int j=0; j<arr_len; ++j){
       printf("%d ", *(x+j));
     }
     printf("\n");
+    // printf("N_ID: %d, %d\n", n_id, omp_get_device_num());
   }
 }
 
@@ -780,7 +807,7 @@ void autostrat::print_ops(ve_ops *all_ops)
 
 void autostrat::ops_deps(arch * a_arch, ve_ops *all_ops, ve_deps *all_deps, int ***dev_mx_cpy_p, ve_meminfo *all_meminfo)
 {
-  int m_paths = 4, m_hops = 5; // inputs
+  int m_paths = 4, m_hops = 5; // ToDo: define as inputs
   int dev_a = 0, dev_b = 0, dev_i, dev_ii, i_hops, n_hops, i_paths, p_done, max_bw, lnk_bw, i_link, n_link, h_aff;
   float min_lat;
   // typedef std::vector<int> a_path;
@@ -875,6 +902,7 @@ void autostrat::ops_deps(arch * a_arch, ve_ops *all_ops, ve_deps *all_deps, int 
               i_paths++;
               // Remove link
               (*dev_mx_cpy_p)[dev_a][dev_b] = 0;
+              printf("i_paths: %d\n", i_paths);
             }
 
             // Build Paths
@@ -909,11 +937,11 @@ void autostrat::ops_deps(arch * a_arch, ve_ops *all_ops, ve_deps *all_deps, int 
 
                 if (max_bw > 0) 
                 {
-                  printf("Valid H/D Orig: %d Dest: %d Value: %d\n", dev_ii, dev_b, (*dev_mx_cpy_p)[dev_ii][dev_b]);
+                  printf("[] Valid H/D Orig: %d Dest: %d Value: %d ", dev_ii, dev_b, (*dev_mx_cpy_p)[dev_ii][dev_b]);
                   // Generate dependencies
                   op_deps = new cops_dep(0, 0, dev_a, dev_ii, a_arch->node_id[dev_a], a_arch->node_id[dev_ii], 0, i_paths, 0, i_paths);
                   all_deps->push_back(op_deps);
-                  op_deps = new cops_dep(0, 0, dev_ii, dev_b, a_arch->node_id[dev_ii], a_arch->node_id[dev_b], 0, 0, 0, i_paths);
+                  op_deps = new cops_dep(1, 0, dev_ii, dev_b, a_arch->node_id[dev_ii], a_arch->node_id[dev_b], 0, 0, i_paths, i_paths);
                   all_deps->push_back(op_deps);
                   all_meminfo->push_back(new mem_info{dev_ii, 0});
                   // Remove links
@@ -946,7 +974,7 @@ void autostrat::ops_deps(arch * a_arch, ve_ops *all_ops, ve_deps *all_deps, int 
             {
               if (a_mem->node_id != dev_a && a_mem->node_id != dev_b) 
               {
-                a_mem->size = t_op->get_size()/i_paths;
+                a_mem->size = t_op->get_size()/i_paths * sizeof(int); // ToDo: MEM integers only
               }
             }
             
