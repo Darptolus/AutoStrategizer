@@ -5,6 +5,7 @@
 #include <vector>
 #include <numa.h>
 #include <omp.h>
+#include <chrono>
 
 // #include <sstream>
 
@@ -216,7 +217,13 @@ int main()
 
   if (v_flag) print_ops(&all_ops);
 
+  const auto start_time = std::chrono::steady_clock::now();
   ops_deps(&t_arch, &all_ops, &all_deps, &dev_mx_cpy, &all_meminfo);
+  const auto end_time = std::chrono::steady_clock::now();
+
+  const std::chrono::duration<double> elapsed_seconds = end_time - start_time;
+
+  std::cout << elapsed_seconds.count() << '\n'; // C++20: operator<< chrono::duration
 
   // Outputs
   if (v_flag) print_cpat(&all_deps);
@@ -326,7 +333,7 @@ int main()
             );
           }
         }else{
-          #pragma omp task depend(in:mem_ptr[a_dep->orig]) shared(mem_ptr)
+          #pragma omp task depend(in:mem_ptr[a_dep->orig]) depend(out:mem_ptr[a_dep->dest]) shared(mem_ptr)
           {
             // printf("Thread = %d\n", omp_get_thread_num());
             printf("[EXEC2:] Orig: %d (ID: %d) - Dest: %d (ID: %d) - Size: %zu O_Offs: %zu D_Offs: %zu, Path No.: %d - Thread = %d\n", a_dep->orig, a_dep->o_id, a_dep->dest, a_dep->d_id, a_dep->size, a_dep->of_s, a_dep->of_d, a_dep->ipth, omp_get_thread_num());
@@ -555,7 +562,6 @@ int autostrat::get_topo(ifstream *arch_f, arch * a_arch)
 
 }
 
-
 void autostrat::copy_mx(arch * a_arch, int ***dev_mx_cpy_p, int new_cpy)
 {
   int dev_a, dev_b;
@@ -580,7 +586,6 @@ void autostrat::del_mx(arch * a_arch, int ***dev_mx_cpy_p)
   free(*dev_mx_cpy_p);
 }
 
-
 // void print_mx(int ***dev_mx_p, int a_arch->get_ndev(), int a_arch->get_nhst())
 void autostrat::print_mx(arch * a_arch)
 {
@@ -594,7 +599,7 @@ void autostrat::print_mx(arch * a_arch)
 
 }
 
-  // printf("dev_mx address: %p\n", dev_mx);
+// printf("dev_mx address: %p\n", dev_mx);
 
 void autostrat::print_numa(arch *a_arch)
 {
@@ -726,15 +731,19 @@ int autostrat::get_ops(ifstream *ops_f, ve_ops *all_ops, arch * a_arch)
             }
             else if (word.compare(0,2,"AH") == 0)
             {
-              // All Devices
+              // All Hosts
               cout << "[IN:] "<< word << " " << endl; //ToBeDeleted
-              for(i_dev = 0; i_dev<a_arch->get_nhst(); ++i_dev) a_ops->add_dest(i_dev); // Add No. Hosts
+              for(i_dev = 0; i_dev<a_arch->get_nhst(); ++i_dev) 
+                if((def_ops->get_orig())->front() != i_dev)
+                  a_ops->add_dest(i_dev); // Add No. Hosts
             }
             else if (word.compare(0,2,"AD") == 0)
             {
               // All Devices
               cout << "[IN:] "<< word << " " << endl; //ToBeDeleted
-              for(i_dev = 0; i_dev<a_arch->get_ndev(); ++i_dev) a_ops->add_dest(i_dev + a_arch->get_nhst()); // Add No. Hosts
+              for(i_dev = a_arch->get_nhst(); i_dev<a_arch->get_nnod(); ++i_dev)
+                if ((a_ops->get_orig())->front() != i_dev) 
+                  a_ops->add_dest(i_dev); // Add No. Devices
             }
             iss_a >> word;
           }
@@ -837,7 +846,7 @@ void autostrat::print_ops(ve_ops *all_ops)
 
 void autostrat::ops_deps(arch * a_arch, ve_ops *all_ops, ve_deps *all_deps, int ***dev_mx_cpy_p, ve_meminfo *all_meminfo)
 {
-  int m_paths = 4, m_hops = 5; // ToDo: define as inputs
+  int m_paths = 4, m_hops = 5, ind_p = 1; // ToDo: define as inputs max_paths, max_hops, use indirect_paths
   int dev_a = 0, dev_b = 0, dev_i, dev_ii, i_hops, n_hops, i_paths, p_done, max_bw, lnk_bw, i_link, n_link, h_aff;
   float min_lat;
   // typedef std::vector<int> a_path;
@@ -872,8 +881,12 @@ void autostrat::ops_deps(arch * a_arch, ve_ops *all_ops, ve_deps *all_deps, int 
   typedef std::vector<op_path*> op_paths;
   op_paths::iterator it_path;
   ve_deps::iterator i_cop;
-
+  
   op_paths v_paths, vi_paths; // vector of paths
+
+  std::vector<int> node_conect; // Node connectivity
+  std::vector<int> op_orig;
+  std::vector<int> op_dest;
 
   for (auto& t_op : *all_ops)
   {
@@ -882,7 +895,6 @@ void autostrat::ops_deps(arch * a_arch, ve_ops *all_ops, ve_deps *all_deps, int 
       case D2D:
         printf("[AUST:] Setting D2D: "); //ToBeDeleted
         // Unidirectional one-to-one transfer between devices
-        // ToDo: Validate size orig/dest
         dev_a = *(t_op->get_orig())->begin();
         // n_hops = 2;
         switch (t_op->get_mhtd())
@@ -898,6 +910,12 @@ void autostrat::ops_deps(arch * a_arch, ve_ops *all_ops, ve_deps *all_deps, int 
                 all_deps->push_back(new cops_dep(0, 0, dev_a, dev_b, a_arch->node_id[dev_a], a_arch->node_id[dev_b], t_op->get_size(), 0, 0, 0));
                 all_meminfo->push_back(new mem_info{dev_a, sizeof(int) * t_op->get_size()});
                 all_meminfo->push_back(new mem_info{dev_b, sizeof(int) * t_op->get_size()});
+              } else if(ind_p) {
+                // ToDo: Validate indirect path (-1)?
+                printf("[AUST:] Valid H/D Orig: %d Dest: %d Value: %d\n", dev_a, dev_b, (*dev_mx_cpy_p)[dev_a][dev_b]); //ToBeDeleted
+                all_deps->push_back(new cops_dep(0, 0, dev_a, dev_b, a_arch->node_id[dev_a], a_arch->node_id[dev_b], t_op->get_size(), 0, 0, 0));
+                all_meminfo->push_back(new mem_info{dev_a, sizeof(int) * t_op->get_size()});
+                all_meminfo->push_back(new mem_info{dev_b, sizeof(int) * t_op->get_size()});
               } else {
                 printf("[AUST_ERR:] Invalid H/D combination\n"); //ToBeDeleted
               }
@@ -909,13 +927,12 @@ void autostrat::ops_deps(arch * a_arch, ve_ops *all_ops, ve_deps *all_deps, int 
           case MXF:
             printf("Using MXF\n"); //ToBeDeleted
             // Find paths with bigher bandwitdh
-            // Single Hop - Single source - Single sink
+            // 2-Hop - Single source - Single sink
             dev_b = *(t_op->get_dest())->begin();
 
             i_paths = 0;
             p_done = 0;
-            i_hops = 0;
-            n_hops = a_arch->get_nnod() - 2; // max number of hops
+            // n_hops = a_arch->get_nnod() - 2; // max number of hops
             all_meminfo->push_back(new mem_info{dev_a, sizeof(int) * t_op->get_size()});
             all_meminfo->push_back(new mem_info{dev_b, sizeof(int) * t_op->get_size()});
             // ToDo: check numa affinty 
@@ -1005,10 +1022,8 @@ void autostrat::ops_deps(arch * a_arch, ve_ops *all_ops, ve_deps *all_deps, int 
 
             // ToDo: check numa affinty 
 
-            // i_paths<m_paths || 
-
+            // Find direct path between origin / destination
             if ((*dev_mx_cpy_p)[dev_a][dev_b]>0) {
-              // ToDo: Remove available link?
               printf("Valid O/D Orig: %d Dest: %d Value: %d\n", dev_a, dev_b, (*dev_mx_cpy_p)[dev_a][dev_b]); //ToBeDeleted
               all_meminfo->push_back(new mem_info{dev_a, sizeof(int) * t_op->get_size()});
               all_meminfo->push_back(new mem_info{dev_b, sizeof(int) * t_op->get_size()});
@@ -1023,10 +1038,10 @@ void autostrat::ops_deps(arch * a_arch, ve_ops *all_ops, ve_deps *all_deps, int 
 
             if (i_paths < m_paths) {
               dev_ii = dev_b;
+              p_done = 0;
               i_link = 0;
               n_link = 0;
               i_hops = 0;
-              p_done = 0;
 
               printf("Creating dest %d \n", dev_ii);
               v_paths.push_back(new op_path(dev_ii, 0, i_hops));
@@ -1143,66 +1158,122 @@ void autostrat::ops_deps(arch * a_arch, ve_ops *all_ops, ve_deps *all_deps, int 
       break; // D2D
 
       case BRC:
-        printf("Setting BRC\n");
+        printf("[AUST:] Setting BRC: ");
         // Unidirectional one-to-all transfer between devices
+        // Copy origin vector
+        op_orig = *t_op->get_orig();
+        // Copy destination vector
+        op_dest = *t_op->get_dest();
+        
+        // Define memory information
+        // Setup memory - Origin
+        for (auto& dev_a : op_orig)
+          all_meminfo->push_back(new mem_info{dev_a, sizeof(int) * t_op->get_size()});
+        // Setup memory - Dest
+        for (auto& dev_b : op_dest)
+          all_meminfo->push_back(new mem_info{dev_b, sizeof(int) * t_op->get_size()});
+        
         switch (t_op->get_mhtd())
         {
           case P2P:
           printf("Using P2P\n");
-          if (t_op->get_orig()->size() > 1)
-          {
-            // Numa affinity
-              for (auto dev_b : *t_op->get_dest()) 
-              {
-                h_aff = *(t_op->get_orig())->begin();
-                for (auto dev_a : *t_op->get_orig()) if ((*dev_mx_cpy_p)[dev_a][dev_b] > (*dev_mx_cpy_p)[h_aff][dev_b]) h_aff = dev_a; // Compare hosts and find affinity
-                
-                if ((*dev_mx_cpy_p)[h_aff][dev_b]>0)
-                {
-                  // ToDo: Remove available link?
-                  printf("Valid H/D Orig: %d Dest: %d Value: %d\n", h_aff, dev_b, (*dev_mx_cpy_p)[h_aff][dev_b]);
-                  op_deps = new cops_dep(0, 0, h_aff, dev_b, a_arch->node_id[h_aff], a_arch->node_id[dev_b], t_op->get_size(), 0, 0, 0);
-                  all_deps->push_back(op_deps);
-                }
-                // ToDo: check for multi-link connection
-                else
-                {
-                  printf("Invalid H/D combination\n");
-                }
-            }
-            
-          }
-          else
-          {
-            dev_a = *(t_op->get_orig())->begin();
-            for (auto dev_b : *t_op->get_dest()) {
-              // Check direct path D2D
-              if ((*dev_mx_cpy_p)[dev_a][dev_b]>0) 
-              {
-                // ToDo: Remove available link?
-                printf("Valid H/D Orig: %d Dest: %d Value: %d\n", dev_a, dev_b, (*dev_mx_cpy_p)[dev_a][dev_b]);
-                op_deps = new cops_dep(0, 0, dev_a, dev_b, a_arch->node_id[dev_a], a_arch->node_id[dev_b], t_op->get_size(), 0, 0, 0);
-                all_deps->push_back(op_deps);
-              }
-              else
-              {
-                printf("Invalid H/D combination\n");
-              }
+          dev_a = *(t_op->get_orig())->begin();
+          // all_meminfo->push_back(new mem_info{dev_a, sizeof(int) * t_op->get_size()});
+          for (auto dev_b : *t_op->get_dest()) {
+            // Check direct path P2P
+            if ((*dev_mx_cpy_p)[dev_a][dev_b]>0) {
+              // ToDo: Remove available link?
+              printf("Valid H/D Orig: %d Dest: %d Value: %d\n", dev_a, dev_b, (*dev_mx_cpy_p)[dev_a][dev_b]);
+              all_deps->push_back(new cops_dep(0, 0, dev_a, dev_b, a_arch->node_id[dev_a], a_arch->node_id[dev_b], t_op->get_size(), 0, 0, 0));
+              // all_meminfo->push_back(new mem_info{dev_b, sizeof(int) * t_op->get_size()});
+            } else if (ind_p){
+              // ToDo: Validate indirect path (-1)?
+              printf("Valid H/D Orig: %d Dest: %d Value: %d\n", dev_a, dev_b, (*dev_mx_cpy_p)[dev_a][dev_b]);
+              all_deps->push_back(new cops_dep(0, 0, dev_a, dev_b, a_arch->node_id[dev_a], a_arch->node_id[dev_b], t_op->get_size(), 0, 0, 0)); 
+            } else {
+              printf("Invalid H/D combination\n");
             }
           }
           // return 0;
           break; // P2P
 
+          // Max-Flow
+          case MXF:
+            printf("Using MXF\n");
+            // Find paths with bigher bandwith
+            // 2-Hop - Single source - Multi-sink
+
+            i_paths = 0;
+            p_done = 0;
+            // n_hops = a_arch->get_nnod() - 2; // max number of hops
+            // ToDo: check numa affinty 
+            
+            while (!p_done) {
+              max_bw = 0;
+              // Find nodes with highest connectivity
+              for (auto& dev_a : op_orig) {
+                // Find max bandwidth
+                for (auto& dev_b : op_dest) {
+                  if ((*dev_mx_cpy_p)[dev_a][dev_b]>max_bw){
+                    // Set max bandwidth
+                    max_bw = (*dev_mx_cpy_p)[dev_a][dev_b];
+                    dev_i = dev_a;
+                    dev_ii = dev_b;
+                  }
+                }
+              }
+
+              if (max_bw > 0) {
+                // Generate dependencies
+                if (dev_i == *(t_op->get_orig())->begin()){
+                  printf("A %d\n", *(t_op->get_orig())->begin());
+                  all_deps->push_back(new cops_dep(0, 0, dev_i, dev_ii, a_arch->node_id[dev_i], a_arch->node_id[dev_ii], t_op->get_size(), 0, 0, i_paths));
+                } else {
+                  printf("B\n");
+                  all_deps->push_back(new cops_dep(1, 0, dev_i, dev_ii, a_arch->node_id[dev_i], a_arch->node_id[dev_ii], t_op->get_size(), 0, 0, i_paths));
+                }
+                // Remove links
+                printf("[AUST:] Valid H/D Orig: %d Dest: %d MaxBW: %d i_paths: %d\n", dev_i, dev_ii, max_bw, i_paths);
+                (*dev_mx_cpy_p)[dev_i][dev_ii] = 0;
+                (*dev_mx_cpy_p)[dev_ii][dev_i] = 0;
+                op_dest.erase(std::remove(op_dest.begin(), op_dest.end(), dev_ii), op_dest.end());
+                op_orig.push_back(dev_ii);
+                i_paths++;
+              } else {
+                printf("no more valid paths\n");
+                p_done=1;
+              }
+              // Check if all destinations have been reached
+              if(op_dest.empty()){
+                p_done = 1;
+                printf("all done \n");
+              }
+            }
+
+
+          break; // MXF
+
           // Distant Vector
           case DVT:
           printf("Using DVT\n");
+            p_done = 0;
+            dev_a = *(t_op->get_orig())->begin();
+            
+            while (!p_done) {
+              // Find connecting paths
+              for (auto& dev_b : *t_op->get_dest()) {
+                printf("Creating dest %d \n", dev_b);
+                i_hops = 1;
+
+                v_paths.push_back(new op_path(dev_ii, 0, i_hops));
+                for (dev_i = 0; dev_i < a_arch->get_nnod(); ++dev_i) {
+
+                }
+
+              }
+            }
           break; // DVT
 
-          // Max-Flow
-          case MXF:
-          printf("Using MXF\n");
-
-          break; // MXF
 
           default:
             printf("Invalid Method\n");
@@ -1360,63 +1431,6 @@ void autostrat::auto_mfree(arch * a_arch, ve_meminfo *all_meminfo, void ** mem_p
 }
 
 
-  // #pragma omp parallel num_threads(num_thr) private(dest_id, cpu, node)
-  // {
-  //   #pragma omp single
-  //   {
-  //     start = omp_get_wtime();
-  //   }
-  //   syscall(SYS_getcpu, &cpu, &node, NULL);
-  //   switch(cpu){
-  //     case 0:
-  //       if (v_flag) printf("MemCpy Dev_0: CPU core %.2u NUMA node %u Thread %d\n", cpu, node, omp_get_thread_num());
-  //         omp_target_memcpy
-  //         (
-  //           x_ptr[0],                                 // dst
-  //           x_arr_0,                                  // src
-  //           size_c,                                   // length 
-  //           0,                                        // dst_offset
-  //           0,                                        // src_offset, 
-  //           0,                                        // dst_device_num
-  //           omp_get_initial_device()                  // src_device_num
-  //         );
-  //     break;
-  //     case 22:
-  //       dest_id = 2;
-  //       if (v_flag) printf("MemCpy Dev_1: CPU core %.2u NUMA node %u Thread %d\n", cpu, node, omp_get_thread_num());
-  //         omp_target_memcpy
-  //         (
-  //           x_ptr[2],                     // dst
-  //           x_arr_1,                            // src
-  //           size_c,                             // length 
-  //           0,                                  // dst_offset
-  //           0,                                  // src_offset, 
-  //           2,                            // dst_device_num
-  //           omp_get_initial_device()            // src_device_num
-  //         );
-  //         omp_target_memcpy
-  //         (
-  //           x_ptr[0],                           // dst
-  //           x_ptr[2],                     // src
-  //           size_c,                             // length 
-  //           size_c,                             // dst_offset
-  //           0,                                  // src_offset, 
-  //           0,                                  // dst_device_num
-  //           2                             // src_device_num
-  //         );
-  //     break;
-  //     // default:
-  //     //   if (v_flag) printf("Default: CPU core %.2u NUMA node %u Thread %d\n", cpu, node, omp_get_thread_num());
-  //   }
-  //   #pragma omp barrier
-  //   #pragma omp single
-  //   {
-  //     end = omp_get_wtime();
-  //   }
-  //   #pragma omp barrier
-  // }
-
-
 
   // printf("All Operations\n");
   // for (auto& it : all_ops)
@@ -1426,26 +1440,6 @@ void autostrat::auto_mfree(arch * a_arch, ve_meminfo *all_meminfo, void ** mem_p
   //   // cout << it->orig << ' ';
   // } 
 
-
-// for (dev_a = 0; dev_a < n_org; ++dev_a)
-// {
-//   for (dev_b = 0; dev_b < n_dst; ++dev_b)
-//   {
-//     // Check direct path D2D
-//     if (dev_mx_cpy[d_org[dev_a]][d_dst[dev_b]]>0) 
-//     {
-//       //Remove available link
-//       printf("Valid H/D combination\n");
-//       printf("Value %d\n", dev_mx_cpy[d_org[dev_a]][d_dst[dev_b]]);
-//       op_deps = new cops_dep(d_org[dev_a], d_dst[dev_b], arr_len, 0);
-//       all_deps.push_back(op_deps);
-//     }
-//     else
-//     {
-//       printf("Invalid H/D combination\n");
-//     }
-//   }
-// }
 
 // Get Array length from command line inputs
   // // if(const char* arr_size = std::getenv("ARR_SZ"))
