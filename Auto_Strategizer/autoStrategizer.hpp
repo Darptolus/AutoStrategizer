@@ -45,11 +45,11 @@ namespace AutoStrategizer
    */
   enum operation
   {
-      D2D,
-      BRC,
-      SCT,
-      GAT,
-      RED
+    D2D,
+    BRC,
+    SCT,
+    GAT,
+    RED
   };
 
   /**
@@ -61,9 +61,9 @@ namespace AutoStrategizer
    */
   enum algorithm
   {
-      H2D,
-      DVT,
-      MXF
+    P2P,
+    MXF,
+    DVT
   };
 
   class dataMovement
@@ -122,6 +122,7 @@ namespace AutoStrategizer
     int get_nnuma(){return n_nma;}
     int get_nnet(){return n_net;}
     int ** get_devmx(){return dev_mx;}
+    int ** get_devmx_cpy(){return dev_mx_cpy;}
     numa_dom * get_numa(){return numa_d;}
     void set_ndev(int a_ndev){
       n_dev = a_ndev;
@@ -129,10 +130,12 @@ namespace AutoStrategizer
       node_id = (int*) malloc(n_nod * sizeof(int));
       // Allocate memory for Interconnectivity Matrix 
       dev_mx = (int**) malloc((n_nod) * sizeof(int*));
+      dev_mx_cpy = (int**) malloc((n_nod) * sizeof(int*));
       // printf("host_id: %d\n", omp_get_initial_device());
       for (int dev = 0; dev < (n_nod); ++dev)
         {
           dev_mx[dev] = (int*)malloc((n_nod) * sizeof(int));
+          dev_mx_cpy[dev] = (int*)malloc((n_nod) * sizeof(int));
           // Set device ID
           if (dev < n_hst)
             node_id[dev]=omp_get_initial_device();
@@ -145,14 +148,84 @@ namespace AutoStrategizer
     void set_nnet(int a_nnet){n_net = a_nnet;}
   };
 
-  
+  class CollectiveOperation
+  {
+  private:
+    std::vector<int> o_orig; // Origin devices (node_num)
+    std::vector<int> o_dest; // Destination devides (node_num)
+    int size; // ToDo: Change to size_t
+    operation cop; // Collective operation
+    algorithm mht; // Heuristic Method
+    int n_orig; // Number of origin devices
+    int n_dest; // Number of destination devices
+  public:
+    CollectiveOperation(){};
+    ~CollectiveOperation(){};
+    void add_origin(int a_orig){
+      o_orig.push_back(a_orig);
+    };
+    void add_destination(int a_dest){
+      o_dest.push_back(a_dest);
+    };
+    void set_size(int a_size){size = a_size;};
+    int get_size(){return size;};
+    void set_coop(operation a_cop){cop = a_cop;};
+    void set_mhtd(algorithm a_mht){mht = a_mht;};
+    int get_norig(){return o_orig.size();};
+    int get_ndest(){return o_dest.size();};
+    operation get_coop(){return cop;};
+    algorithm get_mhtd(){return mht;};
+    std::vector<int>* get_orig(){return &o_orig;};
+    std::vector<int>* get_dest(){return &o_dest;};
+  };
+
+  typedef std::vector<CollectiveOperation*> CO_vector;
+
+  // Communication pattern dependencies
+  class OperationDependence
+  {
+  private:
+    OperationDependence * p_dep;
+  public:
+    // cops_dep(int a_deps, int a_done, int a_orig, int a_dest, int a_size, int a_oof, int a_dof):
+    // deps(a_deps), done(a_done), orig(a_orig), dest(a_dest), size(a_size), of_s(a_oof), of_d(a_dof){};
+    OperationDependence(int a_deps, int a_done, int a_orig, int a_dest, int a_oid, int a_did, int a_size, int a_oof, int a_dof, int a_ipth):
+    deps(a_deps), done(a_done), orig(a_orig), dest(a_dest), o_id(a_oid), d_id(a_did), size(a_size), of_s(a_oof), of_d(a_dof), ipth(a_ipth){};
+    ~OperationDependence(){};
+    // Todo: Add set/get methods
+    int deps;
+    int done;
+    int orig;
+    int dest;
+    int o_id;
+    int d_id;
+    size_t size;
+    size_t of_s;     // Origin Offset
+    size_t of_d;     // Destination Offset
+    int ipth;
+  };
+
+  // All deps
+  typedef std::vector<OperationDependence*> OD_vector;
+
+  struct mem_info
+  {
+    int node_id;
+    size_t size;
+  };
+
+  typedef std::vector<mem_info*> MI_vector;
 
   class AutoStrategizer
   {
   private:
     int dev_a = 0, dev_b = 0, dev_i, dev_ii, n_nodes = 1, arr_len;
     int n_org, n_dst, f_sts;
+    void **mem_ptr; // Memory pointers
     Architecture t_arch;
+    CO_vector all_ops;  // Operation Definition
+    OD_vector all_deps; // Operation Depencences
+    MI_vector all_meminfo; // Memory information
 
   public:
     AutoStrategizer(std::string architectureFile);
@@ -169,7 +242,7 @@ namespace AutoStrategizer
      * @param alg Algorithm
      * @param size Size of data per operation
      */
-    depGraph getStrategy(device_id *source, device_id *destination, operation operation, algorithm alg, uint64_t size);
+    // depGraph getStrategy(device_id *source, device_id *destination, operation operation, algorithm alg, uint64_t size);
 
     /**
      * @brief Prints the current topology
@@ -178,7 +251,20 @@ namespace AutoStrategizer
      *
      */
     void printTopo(printMode mode);
+    void printTopo_cpy(printMode mode);
+    void printCO(printMode mode);
 
+    void addCO(CollectiveOperation * a_CO);
+    void copy_mx();
+
+    void ops_deps();
+
+    void auto_malloc();
+    void auto_mfree();
+
+    OD_vector * getDeps();
+    void ** get_memptr();
+    int get_nnod();
   };
 
   
