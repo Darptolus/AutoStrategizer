@@ -374,13 +374,14 @@ namespace AutoStrategizer
     {
       switch (t_op->get_coop())
       {
-        case D2D:
+        case D2D: // D2D
           printf("[AUST:] Setting D2D: "); //ToBeDeleted
           // Unidirectional one-to-one transfer between devices
           dev_a = *(t_op->get_orig())->begin();
           // n_hops = 2;
           switch (t_op->get_mhtd())
           {
+            // Peer-to-Peer - D2D
             case P2P:
               printf("Using P2P\n"); //ToBeDeleted
               // Allows multiple destinations
@@ -405,230 +406,230 @@ namespace AutoStrategizer
               // return 0;
               break; // P2P
 
-            // Max-Flow
+            // Max-Flow - D2D
             case MXF:
               printf("Using MXF\n"); //ToBeDeleted
               // Find paths with bigher bandwitdh
               // 2-Hop - Single source - Single sink
-              // dev_b = *(t_op->get_dest())->begin();
+              dev_b = *(t_op->get_dest())->begin();
 
-              // i_paths = 0;
-              // p_done = 0;
-              // // n_hops = a_arch->get_nnod() - 2; // max number of hops
-              // all_meminfo->push_back(new mem_info{dev_a, sizeof(int) * t_op->get_size()});
-              // all_meminfo->push_back(new mem_info{dev_b, sizeof(int) * t_op->get_size()});
-              // // ToDo: check numa affinty 
-              // // Check direct connection (1 hop)
-              // if (t_arch.get_devmx_cpy()[dev_a][dev_b]>0){
-              //   all_deps->push_back(new OperationDependence(0, 0, dev_a, dev_b, a_arch->node_id[dev_a], a_arch->node_id[dev_b], 0, 0, 0, i_paths));
-              //   i_paths++;
-              //   // Remove link
-              //   printf("[AUST:] Valid H/D Orig: %d Dest: %d Value: %d i_paths: %d\n", dev_a, dev_b, t_arch.get_devmx_cpy()[dev_a][dev_b], i_paths); //ToBeDeleted
-              //   t_arch.get_devmx_cpy()[dev_a][dev_b] = 0;
-              //   t_arch.get_devmx_cpy()[dev_b][dev_a] = 0;
+              i_paths = 0;
+              p_done = 0;
+              // n_hops = t_arch.get_nnod() - 2; // max number of hops
+              all_meminfo.push_back(new mem_info{dev_a, sizeof(int) * t_op->get_size()});
+              all_meminfo.push_back(new mem_info{dev_b, sizeof(int) * t_op->get_size()});
+              // ToDo: check numa affinty 
+              // Check direct connection (1 hop)
+              if (t_arch.get_devmx_cpy()[dev_a][dev_b]>0){
+                all_deps.push_back(new OperationDependence(0, 0, dev_a, dev_b, t_arch.node_id[dev_a], t_arch.node_id[dev_b], 0, 0, 0, i_paths));
+                i_paths++;
+                // Remove link
+                printf("[AUST:] Valid H/D Orig: %d Dest: %d Value: %d i_paths: %d\n", dev_a, dev_b, t_arch.get_devmx_cpy()[dev_a][dev_b], i_paths); //ToBeDeleted
+                t_arch.get_devmx_cpy()[dev_a][dev_b] = 0;
+                t_arch.get_devmx_cpy()[dev_b][dev_a] = 0;
 
-              // }
+              }
 
-              // // Build Paths
-              // while(!p_done){
-              //   // Find connecting paths
-              //   if(i_paths>=m_paths) {
-              //     p_done = 1;
-              //   } else {
-              //     max_bw = 0;
-              //     for (dev_i = 0; dev_i < a_arch->get_nnod(); ++dev_i){
-              //       // Check if link exists 
-              //       if (dev_i != dev_b && t_arch.get_devmx_cpy()[dev_a][dev_i] > 0 && t_arch.get_devmx_cpy()[dev_i][dev_b] > 0 ) {
-              //         // Get the minimum value of the link 
-              //         lnk_bw = (t_arch.get_devmx_cpy()[dev_a][dev_i] > t_arch.get_devmx_cpy()[dev_i][dev_b]) ? t_arch.get_devmx_cpy()[dev_i][dev_b] : t_arch.get_devmx_cpy()[dev_a][dev_i];
-              //         // Set max bandwidth
-              //         if (lnk_bw > max_bw) {
-              //           max_bw = lnk_bw;
-              //           dev_ii = dev_i;
-              //         }
-              //       }
-              //     }
+              // Build Paths
+              while(!p_done){
+                // Find connecting paths
+                if(i_paths>=m_paths) {
+                  p_done = 1;
+                } else {
+                  max_bw = 0;
+                  for (dev_i = 0; dev_i < t_arch.get_nnod(); ++dev_i){
+                    // Check if link exists 
+                    if (dev_i != dev_b && t_arch.get_devmx_cpy()[dev_a][dev_i] > 0 && t_arch.get_devmx_cpy()[dev_i][dev_b] > 0 ) {
+                      // Get the minimum value of the link 
+                      lnk_bw = (t_arch.get_devmx_cpy()[dev_a][dev_i] > t_arch.get_devmx_cpy()[dev_i][dev_b]) ? t_arch.get_devmx_cpy()[dev_i][dev_b] : t_arch.get_devmx_cpy()[dev_a][dev_i];
+                      // Set max bandwidth
+                      if (lnk_bw > max_bw) {
+                        max_bw = lnk_bw;
+                        dev_ii = dev_i;
+                      }
+                    }
+                  }
 
-              //     if (max_bw > 0) {
-              //       // Generate dependencies
-              //       op_deps = new OperationDependence(0, 0, dev_a, dev_ii, a_arch->node_id[dev_a], a_arch->node_id[dev_ii], 0, i_paths, 0, i_paths);
-              //       all_deps->push_back(op_deps);
-              //       op_deps = new OperationDependence(1, 0, dev_ii, dev_b, a_arch->node_id[dev_ii], a_arch->node_id[dev_b], 0, 0, i_paths, i_paths);
-              //       all_deps->push_back(op_deps);
-              //       // Define memory information
-              //       all_meminfo->push_back(new mem_info{dev_ii, 0});
-              //       // Remove links
-              //       printf("[AUST:] Valid H/D Orig: %d Dest: %d MaxBW: %d i_paths: %d\n", dev_ii, dev_b, max_bw, i_paths);
-              //       t_arch.get_devmx_cpy()[dev_a][dev_ii] = 0;
-              //       t_arch.get_devmx_cpy()[dev_ii][dev_b] = 0;
-              //       i_paths++;
-              //     } else {
-              //       p_done = 1;
-              //       printf("i_paths: %d\n", i_paths);
-              //     }
-              //   }
-              // }
+                  if (max_bw > 0) {
+                    // Generate dependencies
+                    op_deps = new OperationDependence(0, 0, dev_a, dev_ii, t_arch.node_id[dev_a], t_arch.node_id[dev_ii], 0, i_paths, 0, i_paths);
+                    all_deps.push_back(op_deps);
+                    op_deps = new OperationDependence(1, 0, dev_ii, dev_b, t_arch.node_id[dev_ii], t_arch.node_id[dev_b], 0, 0, i_paths, i_paths);
+                    all_deps.push_back(op_deps);
+                    // Define memory information
+                    all_meminfo.push_back(new mem_info{dev_ii, 0});
+                    // Remove links
+                    printf("[AUST:] Valid H/D Orig: %d Dest: %d MaxBW: %d i_paths: %d\n", dev_ii, dev_b, max_bw, i_paths);
+                    t_arch.get_devmx_cpy()[dev_a][dev_ii] = 0;
+                    t_arch.get_devmx_cpy()[dev_ii][dev_b] = 0;
+                    i_paths++;
+                  } else {
+                    p_done = 1;
+                    printf("i_paths: %d\n", i_paths);
+                  }
+                }
+              }
 
-              // // Calculate sizes / offsets
-              // // Evenly 
-              // dev_i = 1;
-              // for (auto& a_dep : *all_deps) {
-              //   a_dep->size = t_op->get_size()/i_paths;
-              //   a_dep->of_s = a_dep->of_s*a_dep->size;
-              //   a_dep->of_d = a_dep->of_d*a_dep->size;
-              //   // printf("Orig: %d Dest: %d Size: %d Offs: %d\n", c_dep->orig, c_dep->dest, c_dep->size, c_dep->offs);
-              //   dev_i++;
-              // }
+              // Calculate sizes / offsets
+              // Evenly 
+              dev_i = 1;
+              for (auto& a_dep : this->all_deps) {
+                a_dep->size = t_op->get_size()/i_paths;
+                a_dep->of_s = a_dep->of_s*a_dep->size;
+                a_dep->of_d = a_dep->of_d*a_dep->size;
+                // printf("Orig: %d Dest: %d Size: %d Offs: %d\n", c_dep->orig, c_dep->dest, c_dep->size, c_dep->offs);
+                dev_i++;
+              }
 
-              // for (auto& a_mem : *all_meminfo) {
-              //   if (a_mem->node_id != dev_a && a_mem->node_id != dev_b) {
+              for (auto& a_mem : this->all_meminfo) {
+                if (a_mem->node_id != dev_a && a_mem->node_id != dev_b) {
                   
-              //     a_mem->size = t_op->get_size()/i_paths * sizeof(int); // ToDo: MEM integers only
-              //   }
-              // }
+                  a_mem->size = t_op->get_size()/i_paths * sizeof(int); // ToDo: MEM integers only
+                }
+              }
               
-              // // Size based on bandwidth
-              // // ******************** HERE ******************** //
+              // Size based on bandwidth
+              // ******************** HERE ******************** //
 
 
             break; // MXF
 
-            // Distant Vector
+            // Distant Vector - D2D
             case DVT:
               printf("Using DVT\n"); //ToBeDeleted
               // Find multiple routes that increase throughput
               // Single sink
               // dev_a = *(t_op->get_orig())->begin();
-              // dev_b = *(t_op->get_dest())->begin();
-              // i_paths = 0;
+              dev_b = *(t_op->get_dest())->begin();
+              i_paths = 0;
 
-              // // ToDo: check numa affinty 
+              // ToDo: check numa affinty 
 
-              // // Find direct path between origin / destination
-              // if (t_arch.get_devmx_cpy()[dev_a][dev_b]>0) {
-              //   printf("Valid O/D Orig: %d Dest: %d Value: %d\n", dev_a, dev_b, t_arch.get_devmx_cpy()[dev_a][dev_b]); //ToBeDeleted
-              //   all_meminfo->push_back(new mem_info{dev_a, sizeof(int) * t_op->get_size()});
-              //   all_meminfo->push_back(new mem_info{dev_b, sizeof(int) * t_op->get_size()});
-              //   // op_deps = new OperationDependence(0, 0, dev_a, dev_b, 0, 0, i_paths);
-              //   // all_deps->push_back(op_deps);
-              //   all_deps->push_back(new OperationDependence(0, 0, dev_a, dev_b, a_arch->node_id[dev_a], a_arch->node_id[dev_b], 0, 0, 0, i_paths));
-              //   i_paths++;
-              //   // Remove link
-              //   t_arch.get_devmx_cpy()[dev_a][dev_b] = 0;
-              //   t_arch.get_devmx_cpy()[dev_b][dev_a] = 0;
-              // }
+              // Find direct path between origin / destination
+              if (t_arch.get_devmx_cpy()[dev_a][dev_b]>0) {
+                printf("Valid O/D Orig: %d Dest: %d Value: %d\n", dev_a, dev_b, t_arch.get_devmx_cpy()[dev_a][dev_b]); //ToBeDeleted
+                all_meminfo.push_back(new mem_info{dev_a, sizeof(int) * t_op->get_size()});
+                all_meminfo.push_back(new mem_info{dev_b, sizeof(int) * t_op->get_size()});
+                // op_deps = new OperationDependence(0, 0, dev_a, dev_b, 0, 0, i_paths);
+                // all_deps.push_back(op_deps);
+                all_deps.push_back(new OperationDependence(0, 0, dev_a, dev_b, t_arch.node_id[dev_a], t_arch.node_id[dev_b], 0, 0, 0, i_paths));
+                i_paths++;
+                // Remove link
+                t_arch.get_devmx_cpy()[dev_a][dev_b] = 0;
+                t_arch.get_devmx_cpy()[dev_b][dev_a] = 0;
+              }
 
-              // if (i_paths < m_paths) {
-              //   dev_ii = dev_b;
-              //   p_done = 0;
-              //   i_link = 0;
-              //   n_link = 0;
-              //   i_hops = 0;
+              if (i_paths < m_paths) {
+                dev_ii = dev_b;
+                p_done = 0;
+                i_link = 0;
+                n_link = 0;
+                i_hops = 0;
 
-              //   printf("Creating dest %d \n", dev_ii);
-              //   v_paths.push_back(new op_path(dev_ii, 0, i_hops));
-              //   i_hops = 1;
-              //   i_link = 1;
+                printf("Creating dest %d \n", dev_ii);
+                v_paths.push_back(new op_path(dev_ii, 0, i_hops));
+                i_hops = 1;
+                i_link = 1;
 
-              //   while (!p_done) {
-              //     // Calculate latency 
-              //     // Store paths increasing number of links
-              //     for (dev_i = 0; dev_i < a_arch->get_nnod(); ++dev_i) {
-              //       // printf("Testing Link %d to %d \n", dev_i, dev_ii);
-              //       if (dev_i != dev_ii && t_arch.get_devmx_cpy()[dev_i][dev_ii] > 0) {
-              //         // Add link to list
-              //         printf("Creating II Link %d to %d bw: %d, parent %d\n", dev_i, dev_ii, t_arch.get_devmx_cpy()[dev_i][dev_ii], (v_paths.at(i_link-1))->n_id);
-              //         iop_path = new op_path(dev_i, static_cast< float >(t_arch.get_devmx_cpy()[dev_i][dev_ii]), i_hops, v_paths.at(i_link-1));
-              //         v_paths.push_back(iop_path);
-              //         t_arch.get_devmx_cpy()[dev_i][dev_ii] = 0;
-              //         t_arch.get_devmx_cpy()[dev_ii][dev_i] = 0;
-              //         ++n_link;
-              //         if (dev_i == dev_a) {
-              //           // Valid link to origin
-              //           printf("Valid Link %d to %d latency: %f\n", dev_i, dev_ii, v_paths.at(i_link)->p_lat);
-              //           vi_paths.push_back(iop_path);
-              //         }
-              //       }
-              //       // printf("Testing H/D Orig: %d Dest: %d Value: %d\n", dev_i, dev_b, t_arch.get_devmx_cpy()[dev_i][dev_b]); //ToBeDeleted
-              //     }
-              //     if (n_link > i_link) {
-              //       // Assign origin from list of valid links
-              //       dev_ii = v_paths.at(i_link)->n_id;
-              //       // printf("New Node %d \n", dev_ii);
-              //       i_hops = v_paths.at(i_link)->n_hops + 1;
-              //       ++i_link;
-              //     } else if (i_hops >= m_hops) {
-              //       p_done = 1;
-              //       printf(">>>>> Max Hops <<<<<\n");
-              //     } else {
-              //       // No more available links 
-              //       printf("No More Valid Links\n");
-              //       p_done = 1;
-              //     }
-              //     // Get other node with same numer of hops or increase 
-              //   } 
-              // }
+                while (!p_done) {
+                  // Calculate latency 
+                  // Store paths increasing number of links
+                  for (dev_i = 0; dev_i < t_arch.get_nnod(); ++dev_i) {
+                    // printf("Testing Link %d to %d \n", dev_i, dev_ii);
+                    if (dev_i != dev_ii && t_arch.get_devmx_cpy()[dev_i][dev_ii] > 0) {
+                      // Add link to list
+                      printf("Creating II Link %d to %d bw: %d, parent %d\n", dev_i, dev_ii, t_arch.get_devmx_cpy()[dev_i][dev_ii], (v_paths.at(i_link-1))->n_id);
+                      iop_path = new op_path(dev_i, static_cast< float >(t_arch.get_devmx_cpy()[dev_i][dev_ii]), i_hops, v_paths.at(i_link-1));
+                      v_paths.push_back(iop_path);
+                      t_arch.get_devmx_cpy()[dev_i][dev_ii] = 0;
+                      t_arch.get_devmx_cpy()[dev_ii][dev_i] = 0;
+                      ++n_link;
+                      if (dev_i == dev_a) {
+                        // Valid link to origin
+                        printf("Valid Link %d to %d latency: %f\n", dev_i, dev_ii, v_paths.at(i_link)->p_lat);
+                        vi_paths.push_back(iop_path);
+                      }
+                    }
+                    // printf("Testing H/D Orig: %d Dest: %d Value: %d\n", dev_i, dev_b, t_arch.get_devmx_cpy()[dev_i][dev_b]); //ToBeDeleted
+                  }
+                  if (n_link > i_link) {
+                    // Assign origin from list of valid links
+                    dev_ii = v_paths.at(i_link)->n_id;
+                    // printf("New Node %d \n", dev_ii);
+                    i_hops = v_paths.at(i_link)->n_hops + 1;
+                    ++i_link;
+                  } else if (i_hops >= m_hops) {
+                    p_done = 1;
+                    printf(">>>>> Max Hops <<<<<\n");
+                  } else {
+                    // No more available links 
+                    printf("No More Valid Links\n");
+                    p_done = 1;
+                  }
+                  // Get other node with same numer of hops or increase 
+                } 
+              }
               
-              // // Find lowest latency path(s) among valid paths
-              // p_done = 0;
-              // while(!p_done) {
-              //   min_lat = 1000; //ToDo: Figure this out
-              //   // Evaluate all valid paths to find lowest latency 
-              //   for (auto i_path = vi_paths.begin(); i_path != vi_paths.end(); i_path++) {
-              //     if (min_lat > (*i_path)->p_lat) {
-              //       printf("Path to %d latency: %f\n", (*i_path)->n_id, (*i_path)->p_lat);
-              //       min_lat = (*i_path)->p_lat;
-              //       it_path = i_path;
-              //       iop_path = (*i_path);
-              //     }
-              //   }
-              //   if (min_lat != 1000) {
-              //     // Min latency path found
-              //     while(iop_path->n_id != dev_b) {
-              //       // Generate link for communication pattern based on path
-              //       all_deps->push_back(new OperationDependence(iop_path->n_hops-1, 0, iop_path->n_id, iop_path->o_id, a_arch->node_id[iop_path->n_id], a_arch->node_id[iop_path->o_id], 0, 0, 0, i_paths));
-              //       // Define memory information
-              //       printf("[min] Path from %d to %d latency: %f\n", iop_path->n_id, iop_path->o_id, iop_path->p_lat);
-              //       if (iop_path->n_id != dev_a) all_meminfo->push_back(new mem_info{iop_path->n_id, 0});
-              //       iop_path = iop_path->p_op_path;
-              //     }
-              //     i_paths++;
-              //     vi_paths.erase(it_path--);
-              //   }
-              //   if(i_paths>=m_paths){
-              //     p_done = 1;
-              //   }
-              // }
+              // Find lowest latency path(s) among valid paths
+              p_done = 0;
+              while(!p_done) {
+                min_lat = 1000; //ToDo: Figure this out
+                // Evaluate all valid paths to find lowest latency 
+                for (auto i_path = vi_paths.begin(); i_path != vi_paths.end(); i_path++) {
+                  if (min_lat > (*i_path)->p_lat) {
+                    printf("Path to %d latency: %f\n", (*i_path)->n_id, (*i_path)->p_lat);
+                    min_lat = (*i_path)->p_lat;
+                    it_path = i_path;
+                    iop_path = (*i_path);
+                  }
+                }
+                if (min_lat != 1000) {
+                  // Min latency path found
+                  while(iop_path->n_id != dev_b) {
+                    // Generate link for communication pattern based on path
+                    all_deps.push_back(new OperationDependence(iop_path->n_hops-1, 0, iop_path->n_id, iop_path->o_id, t_arch.node_id[iop_path->n_id], t_arch.node_id[iop_path->o_id], 0, 0, 0, i_paths));
+                    // Define memory information
+                    printf("[min] Path from %d to %d latency: %f\n", iop_path->n_id, iop_path->o_id, iop_path->p_lat);
+                    if (iop_path->n_id != dev_a) all_meminfo.push_back(new mem_info{iop_path->n_id, 0});
+                    iop_path = iop_path->p_op_path;
+                  }
+                  i_paths++;
+                  vi_paths.erase(it_path--);
+                }
+                if(i_paths>=m_paths){
+                  p_done = 1;
+                }
+              }
 
-              // // ******************** HERE ******************** //
-              // // Calculate sizes / offsets
-              // // Evenly 
-              // for (auto& a_dep : *all_deps) {
-              //   a_dep->size = t_op->get_size()/i_paths;
-              //   if (a_dep->orig == dev_a) {
-              //     // Origin
-              //     a_dep->of_s = a_dep->ipth*a_dep->size;
-              //     a_dep->of_d = 0; 
-              //   } else if (a_dep->dest == dev_b) {
-              //     // Destination
-              //     a_dep->of_s = 0;
-              //     a_dep->of_d = a_dep->ipth*a_dep->size; 
-              //   } else { 
-              //     // Intermediate
-              //     a_dep->of_s = 0;
-              //     a_dep->of_d = 0; 
-              //   }
-              //   // printf("Orig: %d Dest: %d Size: %d Offs: %d\n", c_dep->orig, c_dep->dest, c_dep->size, c_dep->offs);
-              //   dev_i++;
-              // }
+              // ******************** HERE ******************** //
+              // Calculate sizes / offsets
+              // Evenly 
+              for (auto& a_dep : this->all_deps) {
+                a_dep->size = t_op->get_size()/i_paths;
+                if (a_dep->orig == dev_a) {
+                  // Origin
+                  a_dep->of_s = a_dep->ipth*a_dep->size;
+                  a_dep->of_d = 0; 
+                } else if (a_dep->dest == dev_b) {
+                  // Destination
+                  a_dep->of_s = 0;
+                  a_dep->of_d = a_dep->ipth*a_dep->size; 
+                } else { 
+                  // Intermediate
+                  a_dep->of_s = 0;
+                  a_dep->of_d = 0; 
+                }
+                // printf("Orig: %d Dest: %d Size: %d Offs: %d\n", c_dep->orig, c_dep->dest, c_dep->size, c_dep->offs);
+                dev_i++;
+              }
               
-              // for (auto& a_mem : *all_meminfo){
-              //   if (a_mem->node_id != dev_a && a_mem->node_id != dev_b) {
-              //     a_mem->size = t_op->get_size()/i_paths * sizeof(int); // ToDo: MEM integers only
-              //   }
-              // }
-              // // ToDo: Size based on bandwidth
-              // // ******************** HERE ******************** //
+              for (auto& a_mem : this->all_meminfo){
+                if (a_mem->node_id != dev_a && a_mem->node_id != dev_b) {
+                  a_mem->size = t_op->get_size()/i_paths * sizeof(int); // ToDo: MEM integers only
+                }
+              }
+              // ToDo: Size based on bandwidth
+              // ******************** HERE ******************** //
 
             break; // DVT
 
@@ -650,10 +651,10 @@ namespace AutoStrategizer
           // // Define memory information
           // // Setup memory - Origin
           // for (auto& dev_a : op_orig)
-          //   all_meminfo->push_back(new mem_info{dev_a, sizeof(int) * t_op->get_size()});
+          //   all_meminfo.push_back(new mem_info{dev_a, sizeof(int) * t_op->get_size()});
           // // Setup memory - Dest
           // for (auto& dev_b : op_dest)
-          //   all_meminfo->push_back(new mem_info{dev_b, sizeof(int) * t_op->get_size()});
+          //   all_meminfo.push_back(new mem_info{dev_b, sizeof(int) * t_op->get_size()});
           
           switch (t_op->get_mhtd())
           {
@@ -661,18 +662,18 @@ namespace AutoStrategizer
             case P2P:
               printf("Using P2P\n");
           //     dev_a = *(t_op->get_orig())->begin();
-          //     // all_meminfo->push_back(new mem_info{dev_a, sizeof(int) * t_op->get_size()});
+          //     // all_meminfo.push_back(new mem_info{dev_a, sizeof(int) * t_op->get_size()});
           //     for (auto dev_b : *t_op->get_dest()) {
           //       // Check direct path P2P
           //       if (t_arch.get_devmx_cpy()[dev_a][dev_b]>0) {
           //         // ToDo: Remove available link?
           //         printf("Valid H/D Orig: %d Dest: %d Value: %d\n", dev_a, dev_b, t_arch.get_devmx_cpy()[dev_a][dev_b]);
-          //         all_deps->push_back(new OperationDependence(0, 0, dev_a, dev_b, a_arch->node_id[dev_a], a_arch->node_id[dev_b], t_op->get_size(), 0, 0, 0));
-          //         // all_meminfo->push_back(new mem_info{dev_b, sizeof(int) * t_op->get_size()});
+          //         all_deps.push_back(new OperationDependence(0, 0, dev_a, dev_b, t_arch.node_id[dev_a], t_arch.node_id[dev_b], t_op->get_size(), 0, 0, 0));
+          //         // all_meminfo.push_back(new mem_info{dev_b, sizeof(int) * t_op->get_size()});
           //       } else if (ind_p){
           //         // ToDo: Validate indirect path (-1)?
           //         printf("Valid H/D Orig: %d Dest: %d Value: %d\n", dev_a, dev_b, t_arch.get_devmx_cpy()[dev_a][dev_b]);
-          //         all_deps->push_back(new OperationDependence(0, 0, dev_a, dev_b, a_arch->node_id[dev_a], a_arch->node_id[dev_b], t_op->get_size(), 0, 0, 0)); 
+          //         all_deps.push_back(new OperationDependence(0, 0, dev_a, dev_b, t_arch.node_id[dev_a], t_arch.node_id[dev_b], t_op->get_size(), 0, 0, 0)); 
           //       } else {
           //         printf("Invalid H/D combination\n");
           //       }
@@ -688,7 +689,7 @@ namespace AutoStrategizer
 
               // i_paths = 0;
               // p_done = 0;
-              // // n_hops = a_arch->get_nnod() - 2; // max number of hops
+              // // n_hops = t_arch.get_nnod() - 2; // max number of hops
               // // ToDo: check numa affinty 
               
               // while (!p_done) {
@@ -709,9 +710,9 @@ namespace AutoStrategizer
               //   if (max_bw > 0) {
               //     // Generate dependencies
               //     if (dev_i == *(t_op->get_orig())->begin()){
-              //       all_deps->push_back(new OperationDependence(0, 0, dev_i, dev_ii, a_arch->node_id[dev_i], a_arch->node_id[dev_ii], t_op->get_size(), 0, 0, i_paths));
+              //       all_deps.push_back(new OperationDependence(0, 0, dev_i, dev_ii, t_arch.node_id[dev_i], t_arch.node_id[dev_ii], t_op->get_size(), 0, 0, i_paths));
               //     } else {
-              //       all_deps->push_back(new OperationDependence(1, 0, dev_i, dev_ii, a_arch->node_id[dev_i], a_arch->node_id[dev_ii], t_op->get_size(), 0, 0, i_paths));
+              //       all_deps.push_back(new OperationDependence(1, 0, dev_i, dev_ii, t_arch.node_id[dev_i], t_arch.node_id[dev_ii], t_op->get_size(), 0, 0, i_paths));
               //     }
               //     // Remove links
               //     printf("[AUST:] Valid H/D Orig: %d Dest: %d MaxBW: %d i_paths: %d\n", dev_i, dev_ii, max_bw, i_paths);
@@ -747,7 +748,7 @@ namespace AutoStrategizer
               // i_link = 1;
               // while (!p_done) {
               //   // Find connecting paths
-              //   for (dev_ii = 0; dev_ii < a_arch->get_nnod(); ++dev_ii) {
+              //   for (dev_ii = 0; dev_ii < t_arch.get_nnod(); ++dev_ii) {
               //     // Check if dev is destination
               //     if (t_arch.get_devmx_cpy()[dev_i][dev_ii] > 0)  {
               //       printf("Creating II Link %d to %d bw: %d, parent %d\n", dev_i, dev_i, t_arch.get_devmx_cpy()[dev_i][dev_ii], (v_paths.at(i_link-1))->n_id);

@@ -3,8 +3,8 @@
 int main() {
 
   // Set Architecture
-  // AutoStrategizer::AutoStrategizer my_AutoS("topo_dgx");
-  AutoStrategizer::AutoStrategizer my_AutoS("topo_smx");
+  AutoStrategizer::AutoStrategizer my_AutoS("topo_dgx");
+  // AutoStrategizer::AutoStrategizer my_AutoS("topo_smx");
 
   // Print topology
   my_AutoS.printTopo(AutoStrategizer::CLI);
@@ -19,9 +19,9 @@ int main() {
   my_CoP.add_destination(3);
   my_CoP.set_size(60);
   my_CoP.set_coop(AutoStrategizer::D2D);
-  my_CoP.set_mhtd(AutoStrategizer::P2P); // Peer to Peer
+  // my_CoP.set_mhtd(AutoStrategizer::P2P); // Peer to Peer
   // my_CoP.set_mhtd(AutoStrategizer::MXF); // Max Flow
-  // my_CoP.set_mhtd(AutoStrategizer::DVT); // Distant Vector
+  my_CoP.set_mhtd(AutoStrategizer::DVT); // Distant Vector
 
   my_AutoS.addCO(&my_CoP);
 
@@ -50,7 +50,7 @@ int main() {
     #pragma omp target device(dev_id) map(mem_ptr[node_num], a_len) 
     {
       int* a_val = (int*)mem_ptr[node_num];
-      printf("Initializing %s No. %d ArrX", omp_is_initial_device()?"Host":"Device", omp_get_device_num());
+      printf("Initializing %s No. %d ArrX ", omp_is_initial_device()?"Host":"Device", omp_get_device_num());
       for (int j=0; j<a_len; ++j){
         *(a_val+j) = j;
         // Validate
@@ -67,12 +67,11 @@ int main() {
     printf("[EXEC:] Orig: %d Dest: %d Size: %zu O_Offs: %zu D_Offs: %zu, Path No.: %d\n", a_dep->orig, a_dep->dest, a_dep->size, a_dep->of_s, a_dep->of_d, a_dep->ipth);
 
   // Executing
-
   double start, end;
   int n_deps;
   n_deps = my_AutoS.getDeps()->size();
 
-  #pragma omp parallel shared(mem_ptr) num_threads(n_deps) 
+  #pragma omp parallel firstprivate(mem_ptr) num_threads(n_deps) 
   {
     #pragma omp single
     {
@@ -82,7 +81,7 @@ int main() {
       for (auto& a_dep : *(my_AutoS.getDeps()))
       {
         if (a_dep->deps == 0){
-          #pragma omp task depend(out:mem_ptr[a_dep->dest]) shared(mem_ptr)
+          #pragma omp task depend(out:mem_ptr[a_dep->dest])
           {
             // printf("Thread = %d\n", omp_get_thread_num());
             // printf("host_id: %d\n", omp_get_initial_device());
@@ -99,7 +98,7 @@ int main() {
             );
           }
         }else{
-          #pragma omp task depend(in:mem_ptr[a_dep->orig]) depend(out:mem_ptr[a_dep->dest]) shared(mem_ptr)
+          #pragma omp task depend(in:mem_ptr[a_dep->orig]) depend(out:mem_ptr[a_dep->dest])
           {
             // printf("Thread = %d\n", omp_get_thread_num());
             printf("[EXEC2:] Orig: %d (ID: %d) - Dest: %d (ID: %d) - Size: %zu O_Offs: %zu D_Offs: %zu, Path No.: %d - Thread = %d\n", a_dep->orig, a_dep->o_id, a_dep->dest, a_dep->d_id, a_dep->size, a_dep->of_s, a_dep->of_d, a_dep->ipth, omp_get_thread_num());
@@ -126,7 +125,6 @@ int main() {
   }
 
   // Vallidate
-
   int arr_len, n_id, d_id;
 
   for (auto& a_mem : *(my_AutoS.getMI()))
