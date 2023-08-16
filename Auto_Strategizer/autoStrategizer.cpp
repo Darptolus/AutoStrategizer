@@ -181,9 +181,9 @@ namespace AutoStrategizer
     if(mode == CLI)
     {
       printf("Interconnectivity Matrix\n");
-      for (dev_a = 0; dev_a < t_arch.get_ndev() + t_arch.get_nhst(); ++dev_a)
+      for (dev_a = 0; dev_a < t_arch.get_nnod(); ++dev_a)
       {
-        for (dev_b = 0; dev_b < t_arch.get_ndev() + t_arch.get_nhst(); ++dev_b)
+        for (dev_b = 0; dev_b < t_arch.get_nnod(); ++dev_b)
           printf("%2d ", t_arch.get_devmx_cpy()[dev_a][dev_b]);
         printf("\n");
       }
@@ -193,8 +193,8 @@ namespace AutoStrategizer
   void AutoStrategizer::copy_mx()
   {
     // Copy device matrix information
-    for (dev_a = 0; dev_a < t_arch.get_ndev() + t_arch.get_nhst(); ++dev_a)
-      for (dev_b = 0; dev_b < t_arch.get_ndev() + t_arch.get_nhst(); ++dev_b)
+    for (dev_a = 0; dev_a < t_arch.get_nnod(); ++dev_a)
+      for (dev_b = 0; dev_b < t_arch.get_nnod(); ++dev_b)
         t_arch.get_devmx_cpy()[dev_a][dev_b] = t_arch.get_devmx()[dev_a][dev_b];
   }
 
@@ -243,7 +243,6 @@ namespace AutoStrategizer
   void AutoStrategizer::addCO(CollectiveOperation * a_CO)
   {
     all_ops.push_back(a_CO);
-    printf("here\n");
     // Create a copy Interconnectivity Matrix 
     this->copy_mx();
 
@@ -254,6 +253,21 @@ namespace AutoStrategizer
   
   OD_vector * AutoStrategizer::getDeps(){
     return &all_deps;
+  }
+
+  CollectiveOperation * AutoStrategizer::getOP(){
+    CollectiveOperation * t_op;
+    t_op = all_ops.front();
+    return t_op;
+  }
+
+  MI_vector * AutoStrategizer::getMI(){
+    return &all_meminfo;
+  }
+
+
+  int AutoStrategizer::get_node_id(int node_num){
+    return t_arch.node_id[node_num];
   }
 
   void ** AutoStrategizer::get_memptr(){
@@ -320,8 +334,6 @@ namespace AutoStrategizer
     float min_lat;
     OperationDependence * op_deps;
     // typedef std::vector<int> a_path;
-
-    printf("here\n");    
 
     class op_path
     {

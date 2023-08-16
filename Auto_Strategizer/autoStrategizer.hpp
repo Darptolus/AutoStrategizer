@@ -263,6 +263,10 @@ namespace AutoStrategizer
     void auto_mfree();
 
     OD_vector * getDeps();
+    CollectiveOperation * getOP();
+    MI_vector * getMI();
+    int get_node_id(int node_num);
+
     void ** get_memptr();
     int get_nnod();
   };
