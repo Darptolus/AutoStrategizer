@@ -278,7 +278,7 @@ namespace AutoStrategizer
     return t_arch.get_nnod();
   }
 
-  void AutoStrategizer::auto_malloc()
+  void AutoStrategizer::auto_malloc(int skip_od)
   {
     size_t chunk_s;
     int dev_id;
@@ -287,23 +287,26 @@ namespace AutoStrategizer
     for (auto& a_mem : this->all_meminfo)
     {
       // chunk_s = sizeof(int) * a_mem->size;
-      if (a_mem->node_id<t_arch.get_nhst())
-      {
-        AS_INFOMSG(1, "Host: %d Size: %zu", a_mem->node_id, a_mem->size);
-        mem_ptr[a_mem->node_id] = numa_alloc_onnode(a_mem->size, a_mem->node_id);
-        // mem_ptr[a_mem->node_id] = (int*) malloc(a_mem->size); 
+      if (skip_od && (a_mem->node_id == (((this->all_ops).front())->get_orig())->front() || a_mem->node_id == (((this->all_ops).front())->get_dest())->front()) ){
+        AS_WARNING(1, "No Memory allocation for origin/destination");
+      }else{
+        if (a_mem->node_id<t_arch.get_nhst())
+          {
+            AS_INFOMSG(1, "Host: %d Size: %zu", a_mem->node_id, a_mem->size);
+            mem_ptr[a_mem->node_id] = numa_alloc_onnode(a_mem->size, a_mem->node_id);
+            // mem_ptr[a_mem->node_id] = (int*) malloc(a_mem->size); 
+          }
+        else
+          {
+            dev_id = t_arch.node_id[a_mem->node_id];
+            AS_INFOMSG(1, "Node: %d Device_ID: %d Size: %zu", a_mem->node_id, dev_id, a_mem->size);
+            mem_ptr[a_mem->node_id] = omp_target_alloc(a_mem->size, dev_id);
+          } 
       }
-      else
-      {
-        dev_id = t_arch.node_id[a_mem->node_id];
-        AS_INFOMSG(1, "Node: %d Device_ID: %d Size: %zu", a_mem->node_id, dev_id, a_mem->size);
-        mem_ptr[a_mem->node_id] = omp_target_alloc(a_mem->size, dev_id);
-        
-      } 
     }
   }
 
-  void AutoStrategizer::auto_mfree()
+  void AutoStrategizer::auto_mfree(int skip_od)
   {
     size_t chunk_s;
     int dev_id;
@@ -312,16 +315,20 @@ namespace AutoStrategizer
     for (auto& a_mem : this->all_meminfo)
     {
       // chunk_s = sizeof(int) * a_mem->size;
-      if (a_mem->node_id<t_arch.get_nhst())
-      {
-        AS_INFOMSG(1, "Host: %d Size: %zu", a_mem->node_id, a_mem->size);
-        numa_free(mem_ptr[a_mem->node_id], chunk_s);
-      }
-      else
-      {
-        dev_id = t_arch.node_id[a_mem->node_id];
-        AS_INFOMSG(1, "Node: %d Device_ID: %d Size: %zu", a_mem->node_id, dev_id, a_mem->size);
-        omp_target_free(mem_ptr[a_mem->node_id], dev_id);
+      if (skip_od && (a_mem->node_id == (((this->all_ops).front())->get_orig())->front() || a_mem->node_id == (((this->all_ops).front())->get_dest())->front()) ){
+        AS_WARNING(1, "No Memory free for origin/destination");
+      }else{
+        if (a_mem->node_id<t_arch.get_nhst())
+          {
+            AS_INFOMSG(1, "Host: %d Size: %zu", a_mem->node_id, a_mem->size);
+            numa_free(mem_ptr[a_mem->node_id], chunk_s);
+          }
+        else
+          {
+            dev_id = t_arch.node_id[a_mem->node_id];
+            AS_INFOMSG(1, "Node: %d Device_ID: %d Size: %zu", a_mem->node_id, dev_id, a_mem->size);
+            omp_target_free(mem_ptr[a_mem->node_id], dev_id);
+          }
       }
     }
   }

@@ -261,8 +261,8 @@ namespace AutoStrategizer
 
     void ops_deps();
 
-    void auto_malloc();
-    void auto_mfree();
+    void auto_malloc(int skip_od);
+    void auto_mfree(int skip_od);
 
     OD_vector * getDeps();
     CollectiveOperation * getOP();

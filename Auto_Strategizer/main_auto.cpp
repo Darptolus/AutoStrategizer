@@ -31,7 +31,7 @@ int main() {
 
   
   // Malloc hosts and targets
-  my_AutoS.auto_malloc();
+  my_AutoS.auto_malloc(0);
 
   // Initialize Origin
   AutoStrategizer::CollectiveOperation * def_ops = my_AutoS.getOP();
@@ -145,7 +145,7 @@ int main() {
   }
 
   // Free memory hosts and targets
-  my_AutoS.auto_mfree();
+  my_AutoS.auto_mfree(1);
 
 
   return 0;
