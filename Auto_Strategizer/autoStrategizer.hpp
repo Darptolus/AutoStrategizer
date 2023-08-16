@@ -222,7 +222,6 @@ namespace AutoStrategizer
   private:
     int dev_a = 0, dev_b = 0, dev_i, dev_ii, n_nodes = 1, arr_len;
     int n_org, n_dst, f_sts;
-    void **mem_ptr; // Memory pointers
     Architecture t_arch;
     CO_vector all_ops;  // Operation Definition
     OD_vector all_deps; // Operation Depencences
@@ -251,6 +250,8 @@ namespace AutoStrategizer
      * @param mode The printing mode
      *
      */
+    void **mem_ptr; // Memory pointers
+    
     void printTopo(printMode mode);
     void printTopo_cpy(printMode mode);
     void printCO(printMode mode);
