@@ -15,6 +15,7 @@
 #include <vector>
 #include <omp.h>
 #include <numa.h>
+#include "autoStrategizer_tools.hpp"
 
 namespace AutoStrategizer
 {

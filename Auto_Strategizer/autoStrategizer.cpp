@@ -166,7 +166,7 @@ namespace AutoStrategizer
   {
     if(mode == CLI)
     {
-      printf("Interconnectivity Matrix\n");
+      printf("[PRINTIM]: Interconnectivity Matrix\n");
       for (dev_a = 0; dev_a < t_arch.get_ndev() + t_arch.get_nhst(); ++dev_a)
       {
         for (dev_b = 0; dev_b < t_arch.get_ndev() + t_arch.get_nhst(); ++dev_b)
@@ -180,7 +180,7 @@ namespace AutoStrategizer
   {
     if(mode == CLI)
     {
-      printf("Interconnectivity Matrix\n");
+      printf("[PRINTIM]: Interconnectivity Matrix\n");
       for (dev_a = 0; dev_a < t_arch.get_nnod(); ++dev_a)
       {
         for (dev_b = 0; dev_b < t_arch.get_nnod(); ++dev_b)
@@ -202,11 +202,11 @@ namespace AutoStrategizer
   {
     if(mode == CLI)
     {
-      printf("[PRINT:] Operation(s):\n");
+      printf("[PRINTCO]: Operation(s):\n");
       for (auto& it : all_ops)
       {
         // Print the values
-        printf("[PRINT:] Type: ");
+        printf("[PRINTCO]: Type: ");
         if (it->get_coop() == D2D) printf("D2D");
         else if (it->get_coop() == BRC) printf("BRC");
         else if (it->get_coop() == SCT) printf("SCT");
@@ -283,20 +283,20 @@ namespace AutoStrategizer
     size_t chunk_s;
     int dev_id;
     // Memory allocation
-    printf("[MALLOC:] Memory  Allocation:\n");
+    AS_INFOMSG(1, "Memory Allocation:");
     for (auto& a_mem : this->all_meminfo)
     {
       // chunk_s = sizeof(int) * a_mem->size;
       if (a_mem->node_id<t_arch.get_nhst())
       {
-        printf("[MALLOC:] Dev: %d Size: %zu\n", a_mem->node_id, a_mem->size);
+        AS_INFOMSG(1, "Host: %d Size: %zu", a_mem->node_id, a_mem->size);
         mem_ptr[a_mem->node_id] = numa_alloc_onnode(a_mem->size, a_mem->node_id);
         // mem_ptr[a_mem->node_id] = (int*) malloc(a_mem->size); 
       }
       else
       {
         dev_id = t_arch.node_id[a_mem->node_id];
-        printf("[MALLOC2:] Node: %d Dev: %d Size: %zu\n", a_mem->node_id, dev_id, a_mem->size);
+        AS_INFOMSG(1, "Node: %d Device_ID: %d Size: %zu", a_mem->node_id, dev_id, a_mem->size);
         mem_ptr[a_mem->node_id] = omp_target_alloc(a_mem->size, dev_id);
         
       } 
@@ -308,19 +308,19 @@ namespace AutoStrategizer
     size_t chunk_s;
     int dev_id;
     // Memory Free
-    printf("[MFREE:] Memory Free:\n");
+    AS_INFOMSG(1, "Memory Free:");
     for (auto& a_mem : this->all_meminfo)
     {
       // chunk_s = sizeof(int) * a_mem->size;
       if (a_mem->node_id<t_arch.get_nhst())
       {
-        printf("[MFREE:] Dev: %d Size: %zu\n", a_mem->node_id, a_mem->size);
+        AS_INFOMSG(1, "Host: %d Size: %zu", a_mem->node_id, a_mem->size);
         numa_free(mem_ptr[a_mem->node_id], chunk_s);
       }
       else
       {
         dev_id = t_arch.node_id[a_mem->node_id];
-        printf("[MFREE2:] Node: %d Dev: %d Size: %zu\n", a_mem->node_id, dev_id, a_mem->size);
+        AS_INFOMSG(1, "Node: %d Device_ID: %d Size: %zu", a_mem->node_id, dev_id, a_mem->size);
         omp_target_free(mem_ptr[a_mem->node_id], dev_id);
       }
     }
@@ -375,7 +375,7 @@ namespace AutoStrategizer
       switch (t_op->get_coop())
       {
         case D2D: // D2D
-          printf("[AUST:] Setting D2D: "); //ToBeDeleted
+          AS_INFOMSG(1, "Setting D2D");
           // Unidirectional one-to-one transfer between devices
           dev_a = *(t_op->get_orig())->begin();
           // n_hops = 2;
@@ -383,24 +383,24 @@ namespace AutoStrategizer
           {
             // Peer-to-Peer - D2D
             case P2P:
-              printf("Using P2P\n"); //ToBeDeleted
+              AS_INFOMSG(1, "Using P2P"); //ToBeDeleted
               // Allows multiple destinations
               for (auto& dev_b : *t_op->get_dest()) {
                 // Check direct path D2D
                 if (t_arch.get_devmx_cpy()[dev_a][dev_b]>0) {
                   // ToDo: Remove available link?
-                  printf("[AUST:] Valid H/D Orig: %d Dest: %d Value: %d\n", dev_a, dev_b, t_arch.get_devmx_cpy()[dev_a][dev_b]); //ToBeDeleted
+                  AS_INFOMSG(1, "Valid Orig: %d Dest: %d Value: %d", dev_a, dev_b, t_arch.get_devmx_cpy()[dev_a][dev_b]); //ToBeDeleted
                   all_deps.push_back(new OperationDependence(0, 0, dev_a, dev_b, t_arch.node_id[dev_a], t_arch.node_id[dev_b], t_op->get_size(), 0, 0, 0));
                   all_meminfo.push_back(new mem_info{dev_a, sizeof(int) * t_op->get_size()});
                   all_meminfo.push_back(new mem_info{dev_b, sizeof(int) * t_op->get_size()});
                 } else if(ind_p) {
                   // ToDo: Validate indirect path (-1)?
-                  printf("[AUST:] Valid H/D Orig: %d Dest: %d Value: %d\n", dev_a, dev_b, t_arch.get_devmx_cpy()[dev_a][dev_b]); //ToBeDeleted
+                  AS_INFOMSG(1, "Valid Orig: %d Dest: %d Value: %d", dev_a, dev_b, t_arch.get_devmx_cpy()[dev_a][dev_b]); //ToBeDeleted
                   all_deps.push_back(new OperationDependence(0, 0, dev_a, dev_b, t_arch.node_id[dev_a], t_arch.node_id[dev_b], t_op->get_size(), 0, 0, 0));
                   all_meminfo.push_back(new mem_info{dev_a, sizeof(int) * t_op->get_size()});
                   all_meminfo.push_back(new mem_info{dev_b, sizeof(int) * t_op->get_size()});
                 } else {
-                  printf("[AUST_ERR:] Invalid H/D combination\n"); //ToBeDeleted
+                  AS_ERROR(1, "Invalid H/D combination"); //ToBeDeleted
                 }
               }
               // return 0;
@@ -408,7 +408,7 @@ namespace AutoStrategizer
 
             // Max-Flow - D2D
             case MXF:
-              printf("Using MXF\n"); //ToBeDeleted
+              AS_INFOMSG(1, "Using MXF"); //ToBeDeleted
               // Find paths with bigher bandwitdh
               // 2-Hop - Single source - Single sink
               dev_b = *(t_op->get_dest())->begin();
@@ -424,7 +424,7 @@ namespace AutoStrategizer
                 all_deps.push_back(new OperationDependence(0, 0, dev_a, dev_b, t_arch.node_id[dev_a], t_arch.node_id[dev_b], 0, 0, 0, i_paths));
                 i_paths++;
                 // Remove link
-                printf("[AUST:] Valid H/D Orig: %d Dest: %d Value: %d i_paths: %d\n", dev_a, dev_b, t_arch.get_devmx_cpy()[dev_a][dev_b], i_paths); //ToBeDeleted
+                AS_INFOMSG(1, "Valid H/D Orig: %d Dest: %d Value: %d i_paths: %d", dev_a, dev_b, t_arch.get_devmx_cpy()[dev_a][dev_b], i_paths); //ToBeDeleted
                 t_arch.get_devmx_cpy()[dev_a][dev_b] = 0;
                 t_arch.get_devmx_cpy()[dev_b][dev_a] = 0;
 
@@ -459,13 +459,13 @@ namespace AutoStrategizer
                     // Define memory information
                     all_meminfo.push_back(new mem_info{dev_ii, 0});
                     // Remove links
-                    printf("[AUST:] Valid H/D Orig: %d Dest: %d MaxBW: %d i_paths: %d\n", dev_ii, dev_b, max_bw, i_paths);
+                    AS_INFOMSG(1, "Valid H/D Orig: %d Dest: %d MaxBW: %d i_paths: %d", dev_ii, dev_b, max_bw, i_paths);
                     t_arch.get_devmx_cpy()[dev_a][dev_ii] = 0;
                     t_arch.get_devmx_cpy()[dev_ii][dev_b] = 0;
                     i_paths++;
                   } else {
                     p_done = 1;
-                    printf("i_paths: %d\n", i_paths);
+                    AS_ERROR(1, "Bandwidht = 0 number of paths = %d", i_paths);
                   }
                 }
               }
@@ -496,7 +496,7 @@ namespace AutoStrategizer
 
             // Distant Vector - D2D
             case DVT:
-              printf("Using DVT\n"); //ToBeDeleted
+              AS_INFOMSG(1, "Using DVT"); //ToBeDeleted
               // Find multiple routes that increase throughput
               // Single sink
               // dev_a = *(t_op->get_orig())->begin();
@@ -507,7 +507,7 @@ namespace AutoStrategizer
 
               // Find direct path between origin / destination
               if (t_arch.get_devmx_cpy()[dev_a][dev_b]>0) {
-                printf("Valid O/D Orig: %d Dest: %d Value: %d\n", dev_a, dev_b, t_arch.get_devmx_cpy()[dev_a][dev_b]); //ToBeDeleted
+                AS_INFOMSG(1, "Valid O/D Orig: %d Dest: %d Value: %d", dev_a, dev_b, t_arch.get_devmx_cpy()[dev_a][dev_b]); //ToBeDeleted
                 all_meminfo.push_back(new mem_info{dev_a, sizeof(int) * t_op->get_size()});
                 all_meminfo.push_back(new mem_info{dev_b, sizeof(int) * t_op->get_size()});
                 // op_deps = new OperationDependence(0, 0, dev_a, dev_b, 0, 0, i_paths);
@@ -526,7 +526,7 @@ namespace AutoStrategizer
                 n_link = 0;
                 i_hops = 0;
 
-                printf("Creating dest %d \n", dev_ii);
+                AS_INFOMSG(1, "Creating destination %d", dev_ii);
                 v_paths.push_back(new op_path(dev_ii, 0, i_hops));
                 i_hops = 1;
                 i_link = 1;
@@ -538,7 +538,7 @@ namespace AutoStrategizer
                     // printf("Testing Link %d to %d \n", dev_i, dev_ii);
                     if (dev_i != dev_ii && t_arch.get_devmx_cpy()[dev_i][dev_ii] > 0) {
                       // Add link to list
-                      printf("Creating II Link %d to %d bw: %d, parent %d\n", dev_i, dev_ii, t_arch.get_devmx_cpy()[dev_i][dev_ii], (v_paths.at(i_link-1))->n_id);
+                      AS_INFOMSG(1, "Creating II Link %d to %d bw: %d, parent %d", dev_i, dev_ii, t_arch.get_devmx_cpy()[dev_i][dev_ii], (v_paths.at(i_link-1))->n_id);
                       iop_path = new op_path(dev_i, static_cast< float >(t_arch.get_devmx_cpy()[dev_i][dev_ii]), i_hops, v_paths.at(i_link-1));
                       v_paths.push_back(iop_path);
                       t_arch.get_devmx_cpy()[dev_i][dev_ii] = 0;
@@ -546,7 +546,7 @@ namespace AutoStrategizer
                       ++n_link;
                       if (dev_i == dev_a) {
                         // Valid link to origin
-                        printf("Valid Link %d to %d latency: %f\n", dev_i, dev_ii, v_paths.at(i_link)->p_lat);
+                        AS_INFOMSG(1, "Valid Link %d to %d latency: %f", dev_i, dev_ii, v_paths.at(i_link)->p_lat);
                         vi_paths.push_back(iop_path);
                       }
                     }
@@ -560,10 +560,10 @@ namespace AutoStrategizer
                     ++i_link;
                   } else if (i_hops >= m_hops) {
                     p_done = 1;
-                    printf(">>>>> Max Hops <<<<<\n");
+                    AS_ERROR(1, "Max Hops Reached");
                   } else {
                     // No more available links 
-                    printf("No More Valid Links\n");
+                    AS_ERROR(1, "No More Valid Links");
                     p_done = 1;
                   }
                   // Get other node with same numer of hops or increase 
@@ -577,7 +577,7 @@ namespace AutoStrategizer
                 // Evaluate all valid paths to find lowest latency 
                 for (auto i_path = vi_paths.begin(); i_path != vi_paths.end(); i_path++) {
                   if (min_lat > (*i_path)->p_lat) {
-                    printf("Path to %d latency: %f\n", (*i_path)->n_id, (*i_path)->p_lat);
+                    AS_INFOMSG(1, "Path to %d latency: %f", (*i_path)->n_id, (*i_path)->p_lat);
                     min_lat = (*i_path)->p_lat;
                     it_path = i_path;
                     iop_path = (*i_path);
@@ -589,7 +589,7 @@ namespace AutoStrategizer
                     // Generate link for communication pattern based on path
                     all_deps.push_back(new OperationDependence(iop_path->n_hops-1, 0, iop_path->n_id, iop_path->o_id, t_arch.node_id[iop_path->n_id], t_arch.node_id[iop_path->o_id], 0, 0, 0, i_paths));
                     // Define memory information
-                    printf("[min] Path from %d to %d latency: %f\n", iop_path->n_id, iop_path->o_id, iop_path->p_lat);
+                    AS_INFOMSG(1, "[min] Path from %d to %d latency: %f", iop_path->n_id, iop_path->o_id, iop_path->p_lat);
                     if (iop_path->n_id != dev_a) all_meminfo.push_back(new mem_info{iop_path->n_id, 0});
                     iop_path = iop_path->p_op_path;
                   }
@@ -635,7 +635,7 @@ namespace AutoStrategizer
 
 
             default:
-              printf("Invalid Method\n");
+              AS_ERROR(1, "Invalid Method\n");
               // return 1;
           }
         break; // D2D
