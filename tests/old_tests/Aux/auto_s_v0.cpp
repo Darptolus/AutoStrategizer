@@ -1,7 +1,7 @@
 #include <iostream>
 #include <fstream>
 #include <string>
-#include<bits/stdc++.h>
+#include <bits/stdc++.h>
 #include <vector>
 #include <numa.h>
 #include <omp.h>
@@ -65,15 +65,15 @@ namespace autostrat
         dev_mx = (int**) malloc((n_nod) * sizeof(int*));
         // printf("host_id: %d\n", omp_get_initial_device());
         for (int dev = 0; dev < (n_nod); ++dev)
-          {
-            dev_mx[dev] = (int*)malloc((n_nod) * sizeof(int));
-            // Set device ID
-            if (dev < n_hst)
-              node_id[dev]=omp_get_initial_device();
-            else
-              node_id[dev]=dev-n_hst;
-            // printf("Dev: %d ID: %d\n", dev, node_id[dev]);
-          }
+        {
+          dev_mx[dev] = (int*)malloc((n_nod) * sizeof(int));
+          // Set device ID
+          if (dev < n_hst)
+            node_id[dev] = omp_get_initial_device();
+          else
+            node_id[dev] = dev-n_hst;
+          // printf("Dev: %d ID: %d\n", dev, node_id[dev]);
+        }
       }
       void set_nhst(int a_nhst){n_hst = a_nhst;}
       void set_nnet(int a_nnet){n_net = a_nnet;}
@@ -232,7 +232,7 @@ int main()
 // Memory allocation
 //**************************************************//
 
-  mem_ptr = (void **) malloc(sizeof(void**) * (t_arch.get_nhst() + t_arch.get_ndev()));
+  mem_ptr = (void **) malloc(sizeof(void**) * (t_arch.get_nnod()));
   auto_malloc(&t_arch, &all_meminfo, mem_ptr);
   
   // mem_ptr[0] = (int*) malloc(240); 
@@ -847,7 +847,7 @@ void autostrat::print_ops(ve_ops *all_ops)
 void autostrat::ops_deps(arch * a_arch, ve_ops *all_ops, ve_deps *all_deps, int ***dev_mx_cpy_p, ve_meminfo *all_meminfo)
 {
   int m_paths = 4, m_hops = 5, ind_p = 1; // ToDo: define as inputs max_paths, max_hops, use indirect_paths
-  int dev_a = 0, dev_b = 0, dev_i, dev_ii, i_hops, n_hops, i_paths, p_done, max_bw, lnk_bw, i_link, n_link, h_aff;
+  int dev_a = 0, dev_b = 0, dev_i, dev_ii, i_hops, n_hops, i_paths, p_done, max_bw, lnk_bw, i_link, n_link, h_aff, f_new;
   float min_lat;
   // typedef std::vector<int> a_path;
 
@@ -857,12 +857,13 @@ void autostrat::ops_deps(arch * a_arch, ve_ops *all_ops, ve_deps *all_deps, int 
   class op_path
   {
     public:
+      // Constructor for origin 
       op_path(int a_n_id, float a_p_bwth, int a_n_hops): n_id(a_n_id), n_hops(a_n_hops){
         p_op_path = NULL;
         // p_lat = 1/a_p_bwth;
         p_lat = 0;
-        // printf("Link lat : %f \n", p_lat);
       };
+      // Constructor for link
       op_path(int a_n_id, float a_p_bwth, int a_n_hops, op_path * a_op_path): n_id(a_n_id), n_hops(a_n_hops), p_op_path(a_op_path){
         p_lat = p_op_path->p_lat + 1/a_p_bwth;
         o_id = p_op_path->n_id;
@@ -870,8 +871,8 @@ void autostrat::ops_deps(arch * a_arch, ve_ops *all_ops, ve_deps *all_deps, int 
       ~op_path(){};
       // ToDo: define set and get methods
       op_path * p_op_path;
-      int n_id;
-      int o_id;
+      int n_id; // node id
+      int o_id; // origin_id
       float p_lat; // path latency
       int n_hops;
       // int get_orig_id(){return o_id;};
@@ -1175,29 +1176,30 @@ void autostrat::ops_deps(arch * a_arch, ve_ops *all_ops, ve_deps *all_deps, int 
         
         switch (t_op->get_mhtd())
         {
+          // Peer to Peer - Broadcast
           case P2P:
-          printf("Using P2P\n");
-          dev_a = *(t_op->get_orig())->begin();
-          // all_meminfo->push_back(new mem_info{dev_a, sizeof(int) * t_op->get_size()});
-          for (auto dev_b : *t_op->get_dest()) {
-            // Check direct path P2P
-            if ((*dev_mx_cpy_p)[dev_a][dev_b]>0) {
-              // ToDo: Remove available link?
-              printf("Valid H/D Orig: %d Dest: %d Value: %d\n", dev_a, dev_b, (*dev_mx_cpy_p)[dev_a][dev_b]);
-              all_deps->push_back(new cops_dep(0, 0, dev_a, dev_b, a_arch->node_id[dev_a], a_arch->node_id[dev_b], t_op->get_size(), 0, 0, 0));
-              // all_meminfo->push_back(new mem_info{dev_b, sizeof(int) * t_op->get_size()});
-            } else if (ind_p){
-              // ToDo: Validate indirect path (-1)?
-              printf("Valid H/D Orig: %d Dest: %d Value: %d\n", dev_a, dev_b, (*dev_mx_cpy_p)[dev_a][dev_b]);
-              all_deps->push_back(new cops_dep(0, 0, dev_a, dev_b, a_arch->node_id[dev_a], a_arch->node_id[dev_b], t_op->get_size(), 0, 0, 0)); 
-            } else {
-              printf("Invalid H/D combination\n");
+            printf("Using P2P\n");
+            dev_a = *(t_op->get_orig())->begin();
+            // all_meminfo->push_back(new mem_info{dev_a, sizeof(int) * t_op->get_size()});
+            for (auto dev_b : *t_op->get_dest()) {
+              // Check direct path P2P
+              if ((*dev_mx_cpy_p)[dev_a][dev_b]>0) {
+                // ToDo: Remove available link?
+                printf("Valid H/D Orig: %d Dest: %d Value: %d\n", dev_a, dev_b, (*dev_mx_cpy_p)[dev_a][dev_b]);
+                all_deps->push_back(new cops_dep(0, 0, dev_a, dev_b, a_arch->node_id[dev_a], a_arch->node_id[dev_b], t_op->get_size(), 0, 0, 0));
+                // all_meminfo->push_back(new mem_info{dev_b, sizeof(int) * t_op->get_size()});
+              } else if (ind_p){
+                // ToDo: Validate indirect path (-1)?
+                printf("Valid H/D Orig: %d Dest: %d Value: %d\n", dev_a, dev_b, (*dev_mx_cpy_p)[dev_a][dev_b]);
+                all_deps->push_back(new cops_dep(0, 0, dev_a, dev_b, a_arch->node_id[dev_a], a_arch->node_id[dev_b], t_op->get_size(), 0, 0, 0)); 
+              } else {
+                printf("Invalid H/D combination\n");
+              }
             }
-          }
-          // return 0;
+            // return 0;
           break; // P2P
 
-          // Max-Flow
+          // Max-Flow - Broadcast
           case MXF:
             printf("Using MXF\n");
             // Find paths with bigher bandwith
@@ -1226,10 +1228,8 @@ void autostrat::ops_deps(arch * a_arch, ve_ops *all_ops, ve_deps *all_deps, int 
               if (max_bw > 0) {
                 // Generate dependencies
                 if (dev_i == *(t_op->get_orig())->begin()){
-                  printf("A %d\n", *(t_op->get_orig())->begin());
                   all_deps->push_back(new cops_dep(0, 0, dev_i, dev_ii, a_arch->node_id[dev_i], a_arch->node_id[dev_ii], t_op->get_size(), 0, 0, i_paths));
                 } else {
-                  printf("B\n");
                   all_deps->push_back(new cops_dep(1, 0, dev_i, dev_ii, a_arch->node_id[dev_i], a_arch->node_id[dev_ii], t_op->get_size(), 0, 0, i_paths));
                 }
                 // Remove links
@@ -1253,24 +1253,82 @@ void autostrat::ops_deps(arch * a_arch, ve_ops *all_ops, ve_deps *all_deps, int 
 
           break; // MXF
 
-          // Distant Vector
+          // Distant Vector - Broadcast
           case DVT:
-          printf("Using DVT\n");
+            printf("Using DVT\n");
             p_done = 0;
-            dev_a = *(t_op->get_orig())->begin();
-            
+            dev_i = *(t_op->get_orig())->begin();
+            i_hops = 0;
+            printf("Creating orig %d \n", dev_i);
+            // Add origin
+            v_paths.push_back(new op_path(dev_i, 0, i_hops));
+            i_hops = 1;
+            i_link = 1;
             while (!p_done) {
               // Find connecting paths
-              for (auto& dev_b : *t_op->get_dest()) {
-                printf("Creating dest %d \n", dev_b);
-                i_hops = 1;
-
-                v_paths.push_back(new op_path(dev_ii, 0, i_hops));
-                for (dev_i = 0; dev_i < a_arch->get_nnod(); ++dev_i) {
-
+              for (dev_ii = 0; dev_ii < a_arch->get_nnod(); ++dev_ii) {
+                // Check if dev is destination
+                if ((*dev_mx_cpy_p)[dev_i][dev_ii] > 0)  {
+                  printf("Creating II Link %d to %d bw: %d, parent %d\n", dev_i, dev_i, (*dev_mx_cpy_p)[dev_i][dev_ii], (v_paths.at(i_link-1))->n_id);
+                  iop_path = new op_path(dev_i, static_cast<float>((*dev_mx_cpy_p)[dev_i][dev_ii]), i_hops, v_paths.at(i_link-1));
+                  v_paths.push_back(iop_path);
+                  (*dev_mx_cpy_p)[dev_i][dev_ii] = 0;
+                  (*dev_mx_cpy_p)[dev_ii][dev_i] = 0;
+                  ++n_link;
+                  for (auto& dev_b : op_dest){
+                    if (dev_ii == dev_b){
+                      // Destination reached 
+                      // Check for existing path
+                      f_new = 1;
+                      auto a_path = vi_paths.begin(); 
+                      while (a_path != vi_paths.end()){
+                        if ((*a_path)->n_id == dev_ii && (*a_path)->p_lat > iop_path->p_lat) {
+                          printf("Lower latency - Existing destination %d\n", dev_ii);
+                          printf("Valid Link %d to %d latency: %f\n", dev_i, dev_b, v_paths.at(i_link)->p_lat);
+                          a_path = vi_paths.erase(a_path);
+                          vi_paths.push_back(iop_path);
+                          f_new = 0;
+                        } else {
+                          a_path++;
+                        }
+                      }
+                      if (f_new == 1) {
+                        printf("Valid Link %d to %d latency: %f\n", dev_i, dev_b, v_paths.at(i_link)->p_lat);
+                        vi_paths.push_back(iop_path);
+                      }
+                    }
+                  }
                 }
-
               }
+             // Check ranges here <<<<<< 
+                  printf("n_link=  %d i_link= %d\n", n_link, i_link);
+              if (n_link > i_link) {
+                // Assign origin from list of valid links
+                dev_i = v_paths.at(i_link)->n_id;
+                // printf("New Node %d \n", dev_ii);
+                i_hops = v_paths.at(i_link)->n_hops + 1;
+                ++i_link;
+              } else if (i_hops >= m_hops) {
+                printf(">>>>> Max Hops <<<<<\n");
+                p_done = 1;
+              } else if (vi_paths.size() == op_dest.size()) {
+                // All paths
+                printf("All paths \n");
+                p_done = 1;
+              }else {
+                // No more available links 
+                printf("No More Valid Links\n");
+                p_done = 1;
+              }
+
+                  // Check if device is origin dev
+                    //  
+                    // Add destination to origins and remove destination
+                    // op_dest.erase(std::remove(op_dest.begin(), op_dest.end(), dev_ii), op_dest.end());
+                    // op_orig.push_back(dev_ii);
+
+              // for (auto& dev_i : op_orig) {
+              // }
             }
           break; // DVT
 

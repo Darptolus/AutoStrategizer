@@ -1,4 +1,4 @@
-#include "autoStrategizer.hpp"
+#include "autoStrategyzer.hpp"
 
 namespace AutoStrategizer
 {
