@@ -3,7 +3,7 @@ project(AutoStrategyzer VERSION 0.1 DESCRIPTION "Communication pattern generatio
 
 find_package(OpenMP REQUIRED)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp -lnuma -fopenmp-targets=nvptx64 --cuda-gpu-arch=sm_70")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp -fopenmp-targets=nvptx64 --cuda-gpu-arch=sm_70")
 
 if (VERBOSE_MODE)
   message("=> AutoStrategyzer VERBOSE MODE ENABLED")
@@ -13,7 +13,7 @@ if (VERBOSE_MODE)
   endif (FNAME)
 endif (VERBOSE_MODE)
 
-include_directories(include)
+include_directories( include )
 
 add_subdirectory( src )
 add_subdirectory( tests )
