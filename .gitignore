@@ -8,4 +8,5 @@
 *.sqlite
 *results*
 *.o
+build*
 .vscode/settings.json
