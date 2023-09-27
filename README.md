@@ -5,7 +5,7 @@ The operations we support include moving, distribution, and consolidation of mem
 For each of them, our AutoStrategizer framework proposes a task graph that transparently improves performance, in terms of latency or bandwidth, compared to naive strategies.
 
 ## Clone GitHub pository
-`git clone git@github.com:Darptolus/AutoStrategyzer.git`
+`git clone git@github.com:Darptolus/AutoStrategizer.git`
 
 ## Compile and Run Tests
 
