@@ -1,12 +1,12 @@
-set( AutoStrategyzer_src
-     autoStrategyzer.cpp
+set( AutoStrategizer_src
+     autoStrategizer.cpp
      )     
 
-set( AutoStrategyzer_inc
-     ${CMAKE_SOURCE_DIR}/include/autoStrategyzer.hpp
+set( AutoStrategizer_inc
+     ${CMAKE_SOURCE_DIR}/include/autoStrategizer.hpp
      )
 
-add_library( AutoStrategyzer SHARED ${AutoStrategyzer_src} ${AutoStrategyzer_inc} )
+add_library( AutoStrategizer SHARED ${AutoStrategizer_src} ${AutoStrategizer_inc} )
 
-set_target_properties( AutoStrategyzer PROPERTIES LINKER_LANGUAGE CXX
-                                        PUBLIC_HEADER "${CMAKE_SOURCE_DIR}/include/autoStrategyzer.hpp")
+set_target_properties( AutoStrategizer PROPERTIES LINKER_LANGUAGE CXX
+                                        PUBLIC_HEADER "${CMAKE_SOURCE_DIR}/include/autoStrategizer.hpp")

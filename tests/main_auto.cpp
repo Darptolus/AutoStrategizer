@@ -1,4 +1,4 @@
-#include "autoStrategyzer.hpp"
+#include "autoStrategizer.hpp"
 
 int main() {
 
