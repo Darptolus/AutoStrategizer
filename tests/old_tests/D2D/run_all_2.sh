@@ -3,6 +3,9 @@
 DIR_NAME="results_d2d_smx_0"
 mkdir $DIR_NAME
 
+current_time=$(date "+%Y.%m.%d-%H.%M.%S")
+file_name=$op_name\_$current_time
+
 # 15360; // 60 Kb
 # 153600; // 600 Kb
 # 1572864; // 6 Mb

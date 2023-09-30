@@ -1,0 +1,5 @@
+# add_subdirectory( Aux )
+add_subdirectory( Broadcast )
+add_subdirectory( D2D )
+# add_subdirectory( Gather )
+# add_subdirectory( Scatter )
