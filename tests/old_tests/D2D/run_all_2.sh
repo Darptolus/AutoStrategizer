@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 
-DIR_NAME="results_d2d_smx_0"
-mkdir $DIR_NAME
+DIR_NAME="results"
+if [ ! -d "$DIR_NAME" ]; then
+  mkdir $DIR_NAME
+fi
 
-current_time=$(date "+%Y.%m.%d-%H.%M.%S")
-file_name=$op_name\_$current_time
+op_name=D2D
+current_time=$(date "+%Y_%m_%d-%H%M%S")
+file_name=$op_name\_$current_time.txt
+all_files=""
 
-# 15360; // 60 Kb
-# 153600; // 600 Kb
-# 1572864; // 6 Mb
-# 15728640; // 60 Mb
-# 157286400; // 600 Mb
-# 1610612736; // 6 Gb
+echo "$file_name"
+touch "$DIR_NAME/$file_name"
 
 for i in 15360 153600 1572864 15728640 157286400 1610612736
 do 
@@ -20,9 +20,11 @@ do
   do
     # echo "ARR_SZ = $ARR_SZ"
     export OMP_PROC_BIND=spread 
-    taskset -c 0,1,22,23 ./d2d_test_7.x>>./$DIR_NAME/out_test_$i.o  2>&1; wait
-    # ToDo: Add Paste
-    # paste -d"\t"  out_test_256.o out_test_2560.o out_test_25600.o out_test_262144.o out_test_2621440.o out_test_26214400.o out_test_209715200.o out_test_235929600.o>test.o 2>&1
+    taskset -c 0,1,22,23 ./d2d_test_11>>./$DIR_NAME/out_test_$i.o  2>&1; wait
   done
+  all_files=$all_files" "$DIR_NAME/out_test_$i.o
 done
 
+paste -d"\t" $all_files > $DIR_NAME/$file_name
+
+rm results/out_test_*
